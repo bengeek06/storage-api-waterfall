@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from app.models.dummy import Dummy
 
-from tests.conftest import create_jwt_token
+from .conftest import create_jwt_token
 
 # Tests for POST /dummies endpoint
 

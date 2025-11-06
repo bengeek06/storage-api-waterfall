@@ -19,6 +19,10 @@ debug mode, and SQLAlchemy modification tracking.
 import os
 from dotenv import load_dotenv
 
+# Error messages constants
+DATABASE_URL_ERROR = "DATABASE_URL environment variable is not set."
+MINIO_SERVICE_URL_ERROR = "MINIO_SERVICE_URL environment variable is not set."
+
 # Load .env file ONLY if not running in Docker
 # This hook ensures environment variables are loaded for flask commands
 if not os.environ.get("IN_DOCKER_CONTAINER") and not os.environ.get(
@@ -38,6 +42,11 @@ class Config:
 
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    
+    # MinIO/S3 Storage configuration
+    MINIO_SERVICE_URL = os.environ.get("MINIO_SERVICE_URL")
+    if not MINIO_SERVICE_URL:
+        raise ValueError(MINIO_SERVICE_URL_ERROR)
 
 
 class DevelopmentConfig(Config):
@@ -46,7 +55,7 @@ class DevelopmentConfig(Config):
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
     if not SQLALCHEMY_DATABASE_URI:
-        raise ValueError("DATABASE_URL environment variable is not set.")
+        raise ValueError(DATABASE_URL_ERROR)
 
 
 class TestingConfig(Config):
@@ -55,7 +64,7 @@ class TestingConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
     if not SQLALCHEMY_DATABASE_URI:
-        raise ValueError("DATABASE_URL environment variable is not set.")
+        raise ValueError(DATABASE_URL_ERROR)
 
 
 class StagingConfig(Config):
@@ -64,7 +73,7 @@ class StagingConfig(Config):
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
     if not SQLALCHEMY_DATABASE_URI:
-        raise ValueError("DATABASE_URL environment variable is not set.")
+        raise ValueError(DATABASE_URL_ERROR)
 
 
 class ProductionConfig(Config):
@@ -73,4 +82,4 @@ class ProductionConfig(Config):
     DEBUG = False
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
     if not SQLALCHEMY_DATABASE_URI:
-        raise ValueError("DATABASE_URL environment variable is not set.")
+        raise ValueError(DATABASE_URL_ERROR)
