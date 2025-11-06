@@ -1,28 +1,63 @@
 openapi: 3.0.3
+
 info:
-  title: Flask template API
+  title: Storage Service API
   version: 0.0.1
   description: |
-    Flask API Template is a ready-to-use Flask microservice template
-    designed to accelerate the development of RESTful microservices.
-
-    Template Features:
-    - REST Architecture: Modular and organized project structure
-    - Database Management: SQLAlchemy with Alembic migrations
-    - Data Validation: Marshmallow schemas for serialization/deserialization
-    - Flexible Configuration: Multi-environment support (dev, test, staging, production)
-    - Monitoring: Health check and version endpoints
-    - Containerization: Ready-to-use Docker configuration
-    - Testing: Test structure with pytest and coverage
-    - Documentation: Integrated OpenAPI/Swagger
-    - Logging: Configurable logging system
+    **Storage Service API** - A comprehensive file and folder management microservice for the Waterfall project.
     
-    This template allows you to quickly start developing a new microservice
-    by providing a solid foundation and ready-to-use best practices.
-
+    ## Overview
+    This service provides a robust abstraction layer over MinIO/S3 storage, offering advanced file management capabilities 
+    including versioning, access control, and collaborative workflows between personal and project spaces.
+    
+    ## Key Features
+    
+    ### 📁 File & Folder Management
+    - **File Operations**: Upload, download, copy, move, and delete files and folders
+    - **Directory Listing**: Browse directory contents with metadata (size, modification dates, type)
+    - **Presigned URLs**: Secure, time-limited URLs for direct client-side file uploads and downloads
+    - **Path Management**: Hierarchical file organization with project and user-based namespacing
+    
+    ### 🔄 Version Control
+    - **File Versioning**: Automatic version tracking for all file modifications
+    - **Version History**: Complete audit trail of file changes with timestamps and user attribution
+    - **Version Promotion**: Seamless promotion of files from personal workspaces to project spaces
+    - **Tag Management**: Apply custom tags (draft, approved, archived) to specific versions for workflow control
+    
+    ### 👥 Workspace Management
+    - **Personal Spaces**: Individual user storage areas for private work and drafts
+    - **Project Spaces**: Shared collaborative spaces for team-based file management
+    - **Cross-Space Operations**: Copy and move files between personal and project environments
+    - **Access Control**: Role-based permissions for different storage areas
+    
+    ### 🔐 Security & Compliance
+    - **JWT Authentication**: Secure API access with token-based authentication
+    - **Authorization**: Fine-grained access control based on user roles and project membership
+    - **Audit Trail**: Complete logging of all file operations for compliance and debugging
+    - **Secure URLs**: Temporary, signed URLs that expire automatically for enhanced security
+    
+    ## Storage Architecture
+    - **Backend**: MinIO S3-compatible object storage
+    - **Namespacing**: Organized by projects and users (`/projects/{id}/` and `/users/{id}/`)
+    - **Metadata**: Rich file metadata stored alongside binary data
+    - **Scalability**: Designed for high-throughput file operations and large-scale deployments
+    
+    ## Typical Workflows
+    1. **Development Cycle**: Users work on files in personal spaces, then promote to project spaces when ready
+    2. **Review Process**: Use version tags to mark files for review, approval, or archival
+    3. **Collaboration**: Team members access shared project files with appropriate permissions
+    4. **Backup & Recovery**: Leverage versioning for file recovery and historical analysis
+    
+    ## Integration
+    This service integrates seamlessly with other Waterfall microservices:
+    - **Identity Service**: For user authentication and authorization
+    - **Project Service**: For project-based access control and workspace management
+    - **Notification Service**: For file operation alerts and workflow notifications
+  
   contact:
-      name: Flask template API Support
-      email: contact@waterfall-project.pro
+    name: Storage Service API Support
+    email: contact@waterfall-project.pro
+  
   license:
     name: AGPL v3 / Commercial
     url: https://github.com/bengeek06/flask_api_template/blob/main/LICENSE
@@ -32,7 +67,7 @@ servers:
     description: Staging development server
   - url: http://localhost:5000
     description: Local development server
-  
+
 security:
   - JWTAuth: []
 
@@ -45,7 +80,7 @@ components:
       description: JWT token passed via HTTP-only cookies for authentication and authorization
 
   schemas:
-
+    # Schemas existants pour les exemples (Dummy)
     Dummy:
       type: object
       required:
@@ -90,6 +125,7 @@ components:
           maxLength: 200
           description: Optional description of the dummy entity
 
+    # Schemas communs pour les erreurs et système
     ErrorResponse:
       type: object
       properties:
@@ -111,7 +147,7 @@ components:
           enum: [healthy, unhealthy]
         service:
           type: string
-          example: template_service
+          example: storage_service
         timestamp:
           type: string
           format: date-time
@@ -135,8 +171,6 @@ components:
                   type: number
                   format: float
 
-
-
     VersionResponse:
       type: object
       properties:
@@ -158,8 +192,171 @@ components:
           type: string
           description: Database connection URL (sensitive info masked)
 
-  responses:
+    # Schemas spécifiques au Storage Service
+    FileItem:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "rapport.pdf"
+        type:
+          type: string
+          enum: [file, directory]
+        size:
+          type: integer
+          example: 20480
+        modified_at:
+          type: string
+          format: date-time
+          example: "2025-10-22T14:35:00Z"
 
+    FileList:
+      type: object
+      properties:
+        path:
+          type: string
+          example: "/projets/42/docs"
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileItem'
+
+    MkdirRequest:
+      type: object
+      properties:
+        project_id:
+          type: integer
+          example: 42
+        path:
+          type: string
+          example: "/designs/v2"
+      required: [project_id, path]
+
+    UploadRequest:
+      type: object
+      properties:
+        project_id:
+          type: integer
+          example: 42
+        path:
+          type: string
+          example: "/docs/specs.pdf"
+      required: [project_id, path]
+
+    PresignedUrlResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          example: "https://minio.example.com/presigned/abcd1234"
+        expires_in:
+          type: integer
+          example: 3600
+
+    FileCopyMoveRequest:
+      type: object
+      properties:
+        source_project_id:
+          type: integer
+          example: 42
+        destination_project_id:
+          type: integer
+          example: 12
+        source_path:
+          type: string
+          example: "/docs/spec.pdf"
+        destination_path:
+          type: string
+          example: "/archives/spec_v2.pdf"
+      required: [source_project_id, destination_project_id, source_path, destination_path]
+
+    PromoteRequest:
+      type: object
+      properties:
+        project_id:
+          type: integer
+          example: 42
+        user_id:
+          type: integer
+          example: 1001
+        source_path:
+          type: string
+          example: "/users/alex/spec_v3.pdf"
+        destination_path:
+          type: string
+          example: "/projects/42/docs/spec.pdf"
+        comment:
+          type: string
+          example: "Mise à jour après relecture"
+      required: [project_id, user_id, source_path, destination_path]
+
+    Version:
+      type: object
+      properties:
+        version_id:
+          type: string
+          example: "v2025.10.22.001"
+        uploaded_by:
+          type: integer
+          example: 1001
+        comment:
+          type: string
+          example: "Révision validée"
+        tag:
+          type: string
+          example: "approved"
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-10-22T15:12:00Z"
+
+    VersionList:
+      type: object
+      properties:
+        file:
+          type: string
+          example: "/docs/spec.pdf"
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Version'
+
+    TagRequest:
+      type: object
+      properties:
+        project_id:
+          type: integer
+          example: 42
+        path:
+          type: string
+          example: "/docs/spec.pdf"
+        version_id:
+          type: string
+          example: "v2025.10.22.001"
+        tag:
+          type: string
+          example: "approved"
+        comment:
+          type: string
+          example: "Revu par Jean"
+      required: [project_id, path, version_id, tag]
+
+    DeleteRequest:
+      type: object
+      properties:
+        project_id:
+          type: integer
+          example: 42
+        path:
+          type: string
+          example: "/docs/old_spec.pdf"
+      required: [project_id, path]
+
+
+
+
+  responses:
+    # Responses pour les Dummy (exemples)
     DummyCreated:
       description: Dummy created successfully
       content:
@@ -201,6 +398,7 @@ components:
                 type: string
                 example: "Dummy deleted successfully"
 
+    # Responses communes d'erreur
     Unauthorized:
       description: Missing, invalid, or expired JWT token
       content:
@@ -257,7 +455,62 @@ components:
 
 
 paths:
+  # Endpoints système
+  /health:
+    get:
+      tags: [System]
+      summary: Health check endpoint
+      description: Returns comprehensive health information including database connectivity
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
 
+  /version:
+    get:
+      tags: [System]
+      summary: Get API version
+      description: Returns the current version of the Storage Service API
+      responses:
+        '200':
+          description: API version information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /config:
+    get:
+      tags: [System]
+      summary: Get application configuration
+      description: Returns current application configuration (non-sensitive data only)
+      responses:
+        '200':
+          description: Application configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # Endpoints Dummy (exemples - à supprimer en production)
   /dummies:
     get:
       tags: [Dummy]
@@ -376,65 +629,352 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /health:
-    get:
-      tags: [System]
-      summary: Health check endpoint
-      description: Returns comprehensive health information including database connectivity
-      security: []
-      responses:
-        '200':
-          description: Service is healthy
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HealthResponse'
-        '503':
-          description: Service is unhealthy
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HealthResponse'
+  # Endpoints Storage Service - Gestion des fichiers
 
-  /version:
+  /storage/list:
     get:
-      tags: [System]
-      summary: Get API version
-      description: Returns the current version of the identity Service API
+      summary: Lister les fichiers et dossiers
+      tags: [Files]
+      description: Liste le contenu d'un répertoire (projet ou espace personnel)
+      parameters:
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Identifiant du projet à parcourir
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Identifiant de l'utilisateur (si espace personnel)
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Chemin relatif à lister
       responses:
         '200':
-          description: API version information
+          description: Contenu du répertoire
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VersionResponse'
+                $ref: '#/components/schemas/FileList'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
-  /config:
-    get:
-      tags: [System]
-      summary: Get application configuration
-      description: Returns current application configuration (non-sensitive data only)
+  /storage/mkdir:
+    post:
+      summary: Créer un dossier
+      tags: [Files]
+      description: Crée un nouveau dossier dans l'espace projet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MkdirRequest'
       responses:
-        '200':
-          description: Application configuration
+        '201':
+          description: Dossier créé avec succès
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ConfigResponse'
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Dossier créé avec succès"
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /storage/upload-url:
+    post:
+      summary: Générer une URL pré-signée pour upload
+      tags: [Files]
+      description: Génère une URL pré-signée pour l'upload d'un fichier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadRequest'
+      responses:
+        '200':
+          description: URL d'upload générée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresignedUrlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
+  /storage/download-url:
+    get:
+      summary: Générer une URL pré-signée pour téléchargement
+      tags: [Files]
+      description: Génère une URL pré-signée pour le téléchargement d'un fichier
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Identifiant du projet
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Chemin vers le fichier
+      responses:
+        '200':
+          description: URL de téléchargement générée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresignedUrlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /storage/copy:
+    post:
+      summary: Copier un fichier ou dossier
+      tags: [Files]
+      description: Copie un fichier ou dossier d'un emplacement vers un autre
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileCopyMoveRequest'
+      responses:
+        '200':
+          description: Copie effectuée avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Fichier copié avec succès"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /storage/move:
+    post:
+      summary: Déplacer un fichier ou dossier
+      tags: [Files]
+      description: Déplace un fichier ou dossier d'un emplacement vers un autre
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileCopyMoveRequest'
+      responses:
+        '200':
+          description: Déplacement effectué avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Fichier déplacé avec succès"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /storage/promote:
+    post:
+      summary: Promouvoir une version (perso → projet)
+      tags: [Versions]
+      description: |
+        Copie un fichier depuis l'espace personnel vers l'espace projet 
+        et crée une nouvelle version du fichier cible.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromoteRequest'
+      responses:
+        '201':
+          description: Nouvelle version créée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /storage/versions:
+    get:
+      summary: Lister les versions d'un fichier
+      tags: [Versions]
+      description: Retourne la liste de toutes les versions d'un fichier
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: Identifiant du projet
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Chemin vers le fichier
+      responses:
+        '200':
+          description: Liste des versions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /storage/tag:
+    post:
+      summary: Taguer une version
+      tags: [Versions]
+      description: Applique un tag à une version spécifique d'un fichier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagRequest'
+      responses:
+        '200':
+          description: Tag appliqué avec succès
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Tag appliqué avec succès"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /storage/delete:
+    delete:
+      summary: Supprimer un fichier ou dossier
+      tags: [Files]
+      description: Supprime définitivement un fichier ou dossier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteRequest'
+      responses:
+        '204':
+          description: Fichier supprimé avec succès
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
 
 tags:
-- name: System
-  description: System health, version, and configuration endpoints
-- name: Dummy
-  description: Dummy operations
+  - name: System
+    description: |
+      System health monitoring, version information, and configuration endpoints.
+      These endpoints provide essential operational data for service monitoring and debugging.
+  - name: Dummy
+    description: |
+      Example CRUD operations for demonstration purposes.
+      These endpoints showcase the API structure and should be removed in production deployments.
+  - name: Files
+    description: |
+      Core file and folder management operations.
+      Includes listing, creating, uploading, downloading, copying, moving, and deleting files and directories
+      across both personal user spaces and shared project spaces.
+  - name: Versions
+    description: |
+      File versioning and lifecycle management operations.
+      Handles version creation, listing, tagging, and promotion workflows between personal and project spaces.
+      Supports collaborative review processes through version tagging and approval workflows.
