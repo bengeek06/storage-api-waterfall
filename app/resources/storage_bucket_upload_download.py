@@ -79,7 +79,10 @@ class BucketPresignedUrlResource(Resource):
             temp_version = (
                 1  # This will be updated when file is actually created
             )
-            object_key = f"{data['bucket_type']}/{data['bucket_id']}/{data['logical_path']}/{temp_version}"
+            object_key = (
+                f"{data['bucket_type']}/{data['bucket_id']}/"
+                f"{data['logical_path']}/{temp_version}"
+            )
 
             # Generate presigned URL using storage backend
             upload_url, actual_expires_in = (

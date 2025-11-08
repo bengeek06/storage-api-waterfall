@@ -13,7 +13,6 @@ Resources:
     - FileInfoResource: Get comprehensive file information
 """
 
-import uuid
 from datetime import datetime, timezone, timedelta
 from flask import request
 from flask_restful import Resource
@@ -69,10 +68,10 @@ class BaseStorageResource:
         if bucket == "users":
             # User can only access their own bucket
             return bucket_id == user_id
-        elif bucket == "companies":
+        if bucket == "companies":
             # User can access their company's bucket
             return bucket_id == company_id
-        elif bucket == "projects":
+        if bucket == "projects":
             # For projects, we would need to check project membership
             # For now, allow if user belongs to the same company
             # TODO: Implement proper project access control
@@ -186,7 +185,7 @@ class BucketListResource(Resource, BaseStorageResource):
                 400,
             )
 
-        except Exception as e:
+        except (ValueError, TypeError, LookupError) as e:
             logger.error(
                 f"Error listing bucket files: {str(e)}", exc_info=True
             )
@@ -370,7 +369,7 @@ class FileCopyResource(Resource, BaseStorageResource):
                 400,
             )
 
-        except Exception as e:
+        except (ValueError, TypeError, LookupError) as e:
             logger.error(f"Error copying file: {str(e)}", exc_info=True)
             return (
                 error_schema.dump(
@@ -422,7 +421,10 @@ class FileCopyResource(Resource, BaseStorageResource):
             # Copy all versions
             for version in source_file.versions:
                 # Copy the object in MinIO with new key
-                new_object_key = f"{destination_bucket_type}/{destination_bucket_id}/{destination_path}/{version.version_number}"
+                new_object_key = (
+                    f"{destination_bucket_type}/{destination_bucket_id}/"
+                    f"{destination_path}/{version.version_number}"
+                )
 
                 # TODO: Implement MinIO object copy
                 # storage_backend.copy_object(version.object_key, new_object_key)
@@ -447,7 +449,10 @@ class FileCopyResource(Resource, BaseStorageResource):
             # Copy only current version
             current_version = source_file.get_current_version()
             if current_version:
-                new_object_key = f"{destination_bucket_type}/{destination_bucket_id}/{destination_path}/1"
+                new_object_key = (
+                    f"{destination_bucket_type}/{destination_bucket_id}/"
+                    f"{destination_path}/1"
+                )
 
                 # TODO: Implement MinIO object copy
                 # storage_backend.copy_object(current_version.object_key, new_object_key)
@@ -591,7 +596,7 @@ class FileLockResource(Resource):
                 400,
             )
 
-        except Exception as e:
+        except (ValueError, TypeError, LookupError) as e:
             logger.error(f"Error locking file: {str(e)}", exc_info=True)
             return (
                 error_schema.dump(
@@ -670,7 +675,7 @@ class FileUnlockResource(Resource):
             # TODO: If force_unlock, check if user has admin privileges
 
             # Release the lock
-            lock.release(released_by=user_id)
+            lock.release(_released_by=user_id)
 
             # Log the action
             AuditLog.log_action(
@@ -793,7 +798,9 @@ class FileInfoResource(Resource, BaseStorageResource):
             # Get current version
             current_version = file_obj.get_current_version()
             if current_version:
-                response_data["current_version"] = current_version  # Pass raw object
+                response_data["current_version"] = (
+                    current_version  # Pass raw object
+                )
 
             # Include additional data if requested
             if args.get("include_versions", False):

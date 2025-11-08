@@ -368,9 +368,7 @@ class TestNewStorageSystem(unittest.TestCase):
         db.session.commit()
 
         response = self.client.get(
-            "/versions", query_string={
-                "file_id": file_obj.id
-            }
+            "/versions", query_string={"file_id": file_obj.id}
         )
 
         # Handle the known datetime serialization issue in test environment
@@ -449,9 +447,7 @@ class TestNewStorageSystem(unittest.TestCase):
         fake_file_id = str(uuid.uuid4())
 
         response = self.client.get(
-            "/versions", query_string={
-                "file_id": fake_file_id
-            }
+            "/versions", query_string={"file_id": fake_file_id}
         )
 
         self.assertEqual(response.status_code, 404)

@@ -22,23 +22,26 @@ class TestStorageModels(unittest.TestCase):
         """Set up test fixtures."""
         # Set up test environment
         import os
+
         os.environ["TESTING"] = "true"
         os.environ["DATABASE_URL"] = "sqlite:///:memory:"
         os.environ["MINIO_SERVICE_URL"] = "http://localhost:9000"
-        
+
         self.app = create_app("app.config.TestingConfig")
-        self.app.config.update({
-            "TESTING": True,
-            "WTF_CSRF_ENABLED": False,
-            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-        })
-        
+        self.app.config.update(
+            {
+                "TESTING": True,
+                "WTF_CSRF_ENABLED": False,
+                "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            }
+        )
+
         self.app_context = self.app.app_context()
         self.app_context.push()
-        
+
         with self.app.app_context():
             db.create_all()
-        
+
         self.user_id = str(uuid.uuid4())
         self.file_id = str(uuid.uuid4())
 
@@ -57,11 +60,11 @@ class TestStorageModels(unittest.TestCase):
             bucket_id=self.user_id,
             logical_path="test.txt",
             filename="test.txt",
-            owner_id=self.user_id
+            owner_id=self.user_id,
         )
         db.session.add(file_obj)
         db.session.commit()
-        
+
         result = StorageFile.get_by_file_id(self.file_id)
         self.assertIsNotNone(result)
         self.assertEqual(result.id, self.file_id)
@@ -79,18 +82,22 @@ class TestStorageModels(unittest.TestCase):
             bucket_id=self.user_id,
             logical_path="documents/test.txt",
             filename="test.txt",
-            owner_id=self.user_id
+            owner_id=self.user_id,
         )
         db.session.add(file_obj)
         db.session.commit()
-        
-        result = StorageFile.get_by_path("users", self.user_id, "documents/test.txt")
+
+        result = StorageFile.get_by_path(
+            "users", self.user_id, "documents/test.txt"
+        )
         self.assertIsNotNone(result)
         self.assertEqual(result.logical_path, "documents/test.txt")
 
     def test_storage_file_get_by_path_not_exists(self):
         """Test StorageFile.get_by_path for non-existent file."""
-        result = StorageFile.get_by_path("users", self.user_id, "nonexistent.txt")
+        result = StorageFile.get_by_path(
+            "users", self.user_id, "nonexistent.txt"
+        )
         self.assertIsNone(result)
 
     def test_storage_file_list_directory_empty(self):
@@ -100,9 +107,9 @@ class TestStorageModels(unittest.TestCase):
             bucket_id=self.user_id,
             path="empty",
             page=1,
-            limit=10
+            limit=10,
         )
-        
+
         self.assertEqual(len(files), 0)
         self.assertEqual(count, 0)
 
@@ -115,20 +122,20 @@ class TestStorageModels(unittest.TestCase):
                 bucket_id=self.user_id,
                 logical_path=f"documents/file{i}.txt",
                 filename=f"file{i}.txt",
-                owner_id=self.user_id
+                owner_id=self.user_id,
             )
             db.session.add(file_obj)
-        
+
         db.session.commit()
-        
+
         files, count = StorageFile.list_directory(
             bucket_type="users",
             bucket_id=self.user_id,
             path="documents",
             page=1,
-            limit=10
+            limit=10,
         )
-        
+
         self.assertEqual(len(files), 3)
         self.assertEqual(count, 3)
 
@@ -141,33 +148,33 @@ class TestStorageModels(unittest.TestCase):
                 bucket_id=self.user_id,
                 logical_path=f"docs/file{i}.txt",
                 filename=f"file{i}.txt",
-                owner_id=self.user_id
+                owner_id=self.user_id,
             )
             db.session.add(file_obj)
-        
+
         db.session.commit()
-        
+
         # Test first page
         files, count = StorageFile.list_directory(
             bucket_type="users",
             bucket_id=self.user_id,
             path="docs",
             page=1,
-            limit=3
+            limit=3,
         )
-        
+
         self.assertEqual(len(files), 3)
         self.assertEqual(count, 5)
-        
+
         # Test second page
         files, count = StorageFile.list_directory(
             bucket_type="users",
             bucket_id=self.user_id,
             path="docs",
             page=2,
-            limit=3
+            limit=3,
         )
-        
+
         self.assertEqual(len(files), 2)
         self.assertEqual(count, 5)
 
@@ -178,24 +185,24 @@ class TestStorageModels(unittest.TestCase):
             bucket_id=self.user_id,
             logical_path="test.txt",
             filename="test.txt",
-            owner_id=self.user_id
+            owner_id=self.user_id,
         )
         db.session.add(file_obj)
         db.session.flush()
-        
+
         version = FileVersion(
             file_id=file_obj.id,
             version_number=1,
             object_key="test/key",
             created_by=self.user_id,
-            status="validated"
+            status="validated",
         )
         db.session.add(version)
         db.session.flush()
-        
+
         file_obj.current_version_id = version.id
         db.session.commit()
-        
+
         current_version = file_obj.get_current_version()
         self.assertIsNotNone(current_version)
         self.assertEqual(current_version.id, version.id)
@@ -207,9 +214,9 @@ class TestStorageModels(unittest.TestCase):
             bucket_id=self.user_id,
             logical_path="test.txt",
             filename="test.txt",
-            owner_id=self.user_id
+            owner_id=self.user_id,
         )
-        
+
         current_version = file_obj.get_current_version()
         self.assertIsNone(current_version)
 
@@ -220,11 +227,11 @@ class TestStorageModels(unittest.TestCase):
             bucket_id=self.user_id,
             logical_path="test.txt",
             filename="test.txt",
-            owner_id=self.user_id
+            owner_id=self.user_id,
         )
         db.session.add(file_obj)
         db.session.commit()
-        
+
         next_version = file_obj.get_next_version_number()
         self.assertEqual(next_version, 1)
 
@@ -235,23 +242,23 @@ class TestStorageModels(unittest.TestCase):
             bucket_id=self.user_id,
             logical_path="test.txt",
             filename="test.txt",
-            owner_id=self.user_id
+            owner_id=self.user_id,
         )
         db.session.add(file_obj)
         db.session.flush()
-        
+
         # Create versions 1 and 3 (skip 2 to test max logic)
         for version_num in [1, 3]:
             version = FileVersion(
                 file_id=file_obj.id,
                 version_number=version_num,
                 object_key=f"test/key/{version_num}",
-                created_by=self.user_id
+                created_by=self.user_id,
             )
             db.session.add(version)
-        
+
         db.session.commit()
-        
+
         next_version = file_obj.get_next_version_number()
         self.assertEqual(next_version, 4)  # Should be max + 1
 
@@ -262,30 +269,30 @@ class TestStorageModels(unittest.TestCase):
             bucket_id=self.user_id,
             logical_path="test.txt",
             filename="test.txt",
-            owner_id=self.user_id
+            owner_id=self.user_id,
         )
         db.session.add(file_obj)
         db.session.flush()
-        
+
         version = FileVersion(
             file_id=file_obj.id,
             version_number=1,
             object_key="test/key",
             created_by=self.user_id,
-            status="pending_validation"
+            status="pending_validation",
         )
         db.session.add(version)
         db.session.commit()
-        
+
         # Test can_be_validated_by method
         other_user_id = str(uuid.uuid4())
-        
+
         # Creator cannot validate their own version
         self.assertFalse(version.can_be_validated_by(self.user_id))
-        
+
         # Other user can validate if status is pending
         self.assertTrue(version.can_be_validated_by(other_user_id))
-        
+
         # Change status to draft
         version.status = "draft"
         self.assertFalse(version.can_be_validated_by(other_user_id))
@@ -297,23 +304,23 @@ class TestStorageModels(unittest.TestCase):
             bucket_id=self.user_id,
             logical_path="test.txt",
             filename="test.txt",
-            owner_id=self.user_id
+            owner_id=self.user_id,
         )
         db.session.add(file_obj)
         db.session.flush()
-        
+
         version = FileVersion(
             file_id=file_obj.id,
             version_number=1,
             object_key="test/key",
             created_by=self.user_id,
-            status="draft"
+            status="draft",
         )
         db.session.add(version)
         db.session.commit()
-        
+
         version.submit_for_validation(self.user_id)
-        
+
         self.assertEqual(version.status, "pending_validation")
 
     def test_file_version_approve(self):
@@ -323,31 +330,31 @@ class TestStorageModels(unittest.TestCase):
             bucket_id=self.user_id,
             logical_path="test.txt",
             filename="test.txt",
-            owner_id=self.user_id
+            owner_id=self.user_id,
         )
         db.session.add(file_obj)
         db.session.flush()
-        
+
         version = FileVersion(
             file_id=file_obj.id,
             version_number=1,
             object_key="test/key",
             created_by=self.user_id,
-            status="pending_validation"
+            status="pending_validation",
         )
         db.session.add(version)
         db.session.commit()
-        
+
         validator_id = str(uuid.uuid4())
         comment = "Approved for production"
-        
+
         version.approve(validated_by=validator_id, comment=comment)
-        
+
         self.assertEqual(version.status, "validated")
         self.assertEqual(version.validated_by, validator_id)
         self.assertEqual(version.validation_comment, comment)
         self.assertIsNotNone(version.validated_at)
-        
+
         # Check that file's current_version_id is updated
         db.session.refresh(file_obj)
         self.assertEqual(file_obj.current_version_id, version.id)
@@ -359,26 +366,26 @@ class TestStorageModels(unittest.TestCase):
             bucket_id=self.user_id,
             logical_path="test.txt",
             filename="test.txt",
-            owner_id=self.user_id
+            owner_id=self.user_id,
         )
         db.session.add(file_obj)
         db.session.flush()
-        
+
         version = FileVersion(
             file_id=file_obj.id,
             version_number=1,
             object_key="test/key",
             created_by=self.user_id,
-            status="pending_validation"
+            status="pending_validation",
         )
         db.session.add(version)
         db.session.commit()
-        
+
         validator_id = str(uuid.uuid4())
         comment = "Needs more work"
-        
+
         version.reject(validated_by=validator_id, comment=comment)
-        
+
         self.assertEqual(version.status, "rejected")
         self.assertEqual(version.validated_by, validator_id)
         self.assertEqual(version.validation_comment, comment)
@@ -390,9 +397,9 @@ class TestStorageModels(unittest.TestCase):
             file_id=self.file_id,
             locked_by=self.user_id,
             lock_type="edit",
-            reason="Testing lock creation"
+            reason="Testing lock creation",
         )
-        
+
         self.assertEqual(lock.file_id, self.file_id)
         self.assertEqual(lock.locked_by, self.user_id)
         self.assertEqual(lock.lock_type, "edit")
@@ -405,13 +412,13 @@ class TestStorageModels(unittest.TestCase):
             file_id=self.file_id,
             locked_by=self.user_id,
             lock_type="edit",
-            is_active=True
+            is_active=True,
         )
         db.session.add(lock)
         db.session.commit()
-        
+
         lock.release()
-        
+
         self.assertFalse(lock.is_active)
         self.assertIsNotNone(lock.updated_at)
 
@@ -421,9 +428,11 @@ class TestStorageModels(unittest.TestCase):
             file_id=self.file_id,
             locked_by=self.user_id,
             lock_type="edit",
-            expires_at=datetime.now(timezone.utc).replace(year=2030)  # Far in future
+            expires_at=datetime.now(timezone.utc).replace(
+                year=2030
+            ),  # Far in future
         )
-        
+
         self.assertFalse(lock.is_expired())
 
     def test_lock_is_expired_no_expiration(self):
@@ -432,9 +441,9 @@ class TestStorageModels(unittest.TestCase):
             file_id=self.file_id,
             locked_by=self.user_id,
             lock_type="edit",
-            expires_at=None
+            expires_at=None,
         )
-        
+
         self.assertFalse(lock.is_expired())
 
     def test_lock_is_expired_expired(self):
@@ -443,9 +452,11 @@ class TestStorageModels(unittest.TestCase):
             file_id=self.file_id,
             locked_by=self.user_id,
             lock_type="edit",
-            expires_at=datetime.now(timezone.utc).replace(year=2020)  # In past
+            expires_at=datetime.now(timezone.utc).replace(
+                year=2020
+            ),  # In past
         )
-        
+
         self.assertTrue(lock.is_expired())
 
     def test_audit_log_log_action(self):
@@ -456,13 +467,15 @@ class TestStorageModels(unittest.TestCase):
             user_id=self.user_id,
             details={"filename": "test.txt", "size": 1024},
             ip_address="192.168.1.1",
-            user_agent="Test Browser"
+            user_agent="Test Browser",
         )
-        
+
         self.assertEqual(log_entry.file_id, self.file_id)
         self.assertEqual(log_entry.action, "upload")
         self.assertEqual(log_entry.user_id, self.user_id)
-        self.assertEqual(log_entry.details, {"filename": "test.txt", "size": 1024})
+        self.assertEqual(
+            log_entry.details, {"filename": "test.txt", "size": 1024}
+        )
         self.assertEqual(log_entry.ip_address, "192.168.1.1")
         self.assertEqual(log_entry.user_agent, "Test Browser")
 
@@ -475,19 +488,19 @@ class TestStorageModels(unittest.TestCase):
                 file_id=self.file_id,
                 action=action,
                 user_id=self.user_id,
-                details={"step": i}
+                details={"step": i},
             )
-        
+
         db.session.commit()
-        
+
         # Get history with default limit
         history = AuditLog.get_file_history(self.file_id)
         self.assertEqual(len(history), 5)
-        
+
         # Get history with custom limit
         history = AuditLog.get_file_history(self.file_id, limit=3)
         self.assertEqual(len(history), 3)
-        
+
         # Verify ordering (should be newest first)
         self.assertEqual(history[0].details["step"], 4)
         self.assertEqual(history[1].details["step"], 3)

@@ -1,13 +1,13 @@
 """
-storage_service.py
-------------------
+storage services
+----------------
 
-This module provides a service layer for MinIO/S3 storage operations.
-It abstracts the storage backend implementation details.
+Storage service abstraction layer for file operations.
 """
 
-from datetime import datetime, timezone
+import os
 import uuid
+from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 
@@ -20,8 +20,6 @@ class StorageBackendService:
     """
 
     def __init__(self):
-        import os
-
         # Use environment variable for public MinIO URL, fallback to example
         self.base_url = os.environ.get(
             "MINIO_PUBLIC_URL", "https://minio.example.com"
@@ -29,19 +27,19 @@ class StorageBackendService:
         self.default_expiry = 3600  # 1 hour
 
     def generate_upload_url(
-        self, storage_key: str, content_type: Optional[str] = None
+        self, storage_key: str, _content_type: Optional[str] = None
     ) -> Tuple[str, int]:
         """
         Generate a presigned URL for file upload.
 
         Args:
             storage_key (str): Unique storage key for the file.
-            content_type (str, optional): MIME type of the file.
+            _content_type (str, optional): MIME type of the file.
 
         Returns:
             tuple: (presigned_url, expires_in_seconds)
         """
-        # In production, this would use boto3 or minio-py to generate actual presigned URLs
+        # In production, use boto3 or minio-py for actual presigned URLs
         presigned_url = (
             f"{self.base_url}/upload/{storage_key}?token={uuid.uuid4()}"
         )
@@ -57,24 +55,24 @@ class StorageBackendService:
         Returns:
             tuple: (presigned_url, expires_in_seconds)
         """
-        # In production, this would use boto3 or minio-py to generate actual presigned URLs
+        # In production, use boto3 or minio-py for actual presigned URLs
         presigned_url = (
             f"{self.base_url}/download/{storage_key}?token={uuid.uuid4()}"
         )
         return presigned_url, self.default_expiry
 
-    def copy_object(self, source_key: str, destination_key: str) -> bool:
+    def copy_object(self, _source_key: str, _destination_key: str) -> bool:
         """
         Copy an object in storage.
 
         Args:
-            source_key (str): Source storage key.
-            destination_key (str): Destination storage key.
+            _source_key (str): Source storage key.
+            _destination_key (str): Destination storage key.
 
         Returns:
             bool: True if successful, False otherwise.
         """
-        # In production, this would use boto3 or minio-py to copy objects
+        # In production, use boto3 or minio-py to copy objects
         # For now, just return True to simulate success
         return True
 
@@ -94,26 +92,26 @@ class StorageBackendService:
             return self.delete_object(source_key)
         return False
 
-    def delete_object(self, storage_key: str) -> bool:
+    def delete_object(self, _storage_key: str) -> bool:
         """
         Delete an object from storage.
 
         Args:
-            storage_key (str): Storage key of the file to delete.
+            _storage_key (str): Storage key of the file to delete.
 
         Returns:
             bool: True if successful, False otherwise.
         """
-        # In production, this would use boto3 or minio-py to delete objects
+        # In production, use boto3 or minio-py to delete objects
         # For now, just return True to simulate success
         return True
 
-    def object_exists(self, storage_key: str) -> bool:
+    def object_exists(self, _storage_key: str) -> bool:
         """
         Check if an object exists in storage.
 
         Args:
-            storage_key (str): Storage key to check.
+            _storage_key (str): Storage key to check.
 
         Returns:
             bool: True if exists, False otherwise.

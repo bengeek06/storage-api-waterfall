@@ -29,19 +29,20 @@ def cleanup_db_connections():
     # Cleanup after each test
     try:
         # Force close any remaining sessions
-        if hasattr(db.session, 'close'):
+        if hasattr(db.session, "close"):
             db.session.close()
-        
+
         # Remove session registry
-        if hasattr(db.session, 'remove'):
+        if hasattr(db.session, "remove"):
             db.session.remove()
-            
+
         # Dispose of the engine connection pool
-        if hasattr(db, 'engine') and hasattr(db.engine, 'dispose'):
+        if hasattr(db, "engine") and hasattr(db.engine, "dispose"):
             db.engine.dispose()
-            
+
         # Force garbage collection to clean up any remaining connections
         import gc
+
         gc.collect()
     except Exception:
         # Ignore cleanup errors but don't let them fail tests
@@ -69,7 +70,7 @@ def app():
             "SQLALCHEMY_ENGINE_OPTIONS": {
                 "pool_pre_ping": True,
                 "pool_recycle": 300,
-            }
+            },
         }
     )
 

@@ -109,9 +109,9 @@ class VersionCommitResource(Resource):
                 object_key=data["object_key"],
                 created_by=user_id,
                 changelog=data.get("changelog"),
-                status="pending_validation"
+                status="pending_validation",
             )
-            
+
             db.session.add(version)
             db.session.commit()
 
@@ -222,7 +222,10 @@ class VersionApproveResource(Resource):
                     error_schema.dump(
                         {
                             "error": "CANNOT_VALIDATE",
-                            "message": "You cannot validate this version (either not pending or you created it)",
+                            "message": (
+                                "You cannot validate this version "
+                                "(either not pending or you created it)"
+                            ),
                         }
                     ),
                     403,
@@ -340,7 +343,10 @@ class VersionRejectResource(Resource):
                     error_schema.dump(
                         {
                             "error": "CANNOT_VALIDATE",
-                            "message": "You cannot validate this version (either not pending or you created it)",
+                            "message": (
+                                "You cannot validate this version "
+                                "(either not pending or you created it)"
+                            ),
                         }
                     ),
                     403,

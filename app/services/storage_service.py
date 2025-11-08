@@ -6,9 +6,13 @@ This module provides a service layer for MinIO/S3 storage operations.
 It abstracts the storage backend implementation details.
 """
 
-from datetime import datetime, timezone
+import os
 import uuid
+from datetime import datetime, timezone
 from typing import Optional, Tuple
+from urllib.parse import urlparse
+
+from minio import Minio
 
 
 class StorageBackendService:
@@ -20,13 +24,9 @@ class StorageBackendService:
     """
 
     def __init__(self):
-        import os
-        from urllib.parse import urlparse
-        from minio import Minio
-
         # Configuration
-        DEFAULT_MINIO_URL = "http://localhost:9000"
-        minio_url = os.environ.get("MINIO_SERVICE_URL", DEFAULT_MINIO_URL)
+        default_minio_url = "http://localhost:9000"
+        minio_url = os.environ.get("MINIO_SERVICE_URL", default_minio_url)
         access_key = os.environ.get("MINIO_ACCESS_KEY", "minioadmin")
         secret_key = os.environ.get("MINIO_SECRET_KEY", "minioadmin")
         self.bucket_name = os.environ.get("MINIO_BUCKET_NAME", "storage")
@@ -61,8 +61,6 @@ class StorageBackendService:
         Returns:
             tuple: (upload_url, expires_in_seconds)
         """
-        import uuid
-
         # Generate a unique upload token
         upload_token = str(uuid.uuid4())
 
@@ -87,13 +85,13 @@ class StorageBackendService:
         presigned_url = f"{self.public_url}/storage/download/{storage_key}?token={uuid.uuid4()}"
         return presigned_url, self.default_expiry
 
-    def copy_object(self, source_key: str, destination_key: str) -> bool:
+    def copy_object(self, _source_key: str, _destination_key: str) -> bool:
         """
         Copy an object in storage.
 
         Args:
-            source_key (str): Source storage key.
-            destination_key (str): Destination storage key.
+            _source_key (str): Source storage key.
+            _destination_key (str): Destination storage key.
 
         Returns:
             bool: True if successful, False otherwise.
@@ -118,12 +116,12 @@ class StorageBackendService:
             return self.delete_object(source_key)
         return False
 
-    def delete_object(self, storage_key: str) -> bool:
+    def delete_object(self, _storage_key: str) -> bool:
         """
         Delete an object from storage.
 
         Args:
-            storage_key (str): Storage key of the file to delete.
+            _storage_key (str): Storage key of the file to delete.
 
         Returns:
             bool: True if successful, False otherwise.
@@ -132,12 +130,12 @@ class StorageBackendService:
         # For now, just return True to simulate success
         return True
 
-    def object_exists(self, storage_key: str) -> bool:
+    def object_exists(self, _storage_key: str) -> bool:
         """
         Check if an object exists in storage.
 
         Args:
-            storage_key (str): Storage key to check.
+            _storage_key (str): Storage key to check.
 
         Returns:
             bool: True if exists, False otherwise.

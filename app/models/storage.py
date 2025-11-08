@@ -88,7 +88,8 @@ class StorageFile(db.Model):
             name="check_bucket_type",
         ),
         db.CheckConstraint(
-            "status IN ('draft', 'upload_pending', 'pending_validation', 'approved', 'rejected', 'requires_revision', 'archived')",
+            "status IN ('draft', 'upload_pending', 'pending_validation', "
+            "'approved', 'rejected', 'requires_revision', 'archived')",
             name="check_status",
         ),
         db.UniqueConstraint(
@@ -101,7 +102,10 @@ class StorageFile(db.Model):
     )
 
     def __repr__(self):
-        return f"<StorageFile {self.logical_path} (ID: {self.id}, Bucket: {self.bucket_type}/{self.bucket_id})>"
+        return (
+            f"<StorageFile {self.logical_path} "
+            f"(ID: {self.id}, Bucket: {self.bucket_type}/{self.bucket_id})>"
+        )
 
     @classmethod
     def get_by_path(cls, bucket_type, bucket_id, logical_path):
@@ -374,7 +378,10 @@ class FileVersion(db.Model):
     )
 
     def __repr__(self):
-        return f"<FileVersion {self.version_number} for File {self.file_id} (Status: {self.status})>"
+        return (
+            f"<FileVersion {self.version_number} for File {self.file_id} "
+            f"(Status: {self.status})>"
+        )
 
     @classmethod
     def create(
@@ -468,12 +475,12 @@ class FileVersion(db.Model):
             .first()
         )
 
-    def submit_for_validation(self, submitted_by):
+    def submit_for_validation(self, _submitted_by):
         """
         Submit this version for validation.
 
         Args:
-            submitted_by (str): UUID of user submitting for validation.
+            _submitted_by (str): UUID of user submitting for validation.
         """
         self.status = "pending_validation"
         self.updated_at = datetime.now(timezone.utc)
@@ -656,12 +663,12 @@ class Lock(db.Model):
             )
         return query.all()
 
-    def release(self, released_by=None):
+    def release(self, _released_by=None):
         """
         Release this lock.
 
         Args:
-            released_by (str): UUID of user releasing the lock.
+            _released_by (str): UUID of user releasing the lock.
         """
         self.is_active = False
         self.updated_at = datetime.now(timezone.utc)
