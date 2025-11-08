@@ -56,9 +56,14 @@ class TestStorageCollaborative(unittest.TestCase):
 
     def tearDown(self):
         """Clean up after tests."""
-        db.session.remove()
-        db.drop_all()
-        self.app_context.pop()
+        try:
+            # Properly close all database connections
+            db.session.close()
+            db.session.remove()
+            db.engine.dispose()
+            db.drop_all()
+        finally:
+            self.app_context.pop()
 
     def authenticate_user(self):
         """Helper to authenticate a user."""

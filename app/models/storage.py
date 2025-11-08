@@ -253,7 +253,7 @@ class StorageFile(db.Model):
             FileVersion: Current version object or None.
         """
         if self.current_version_id:
-            return FileVersion.query.get(self.current_version_id)
+            return db.session.get(FileVersion, self.current_version_id)
         return None
 
     def create_version(
