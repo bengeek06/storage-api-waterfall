@@ -37,55 +37,8 @@ services:
       echo 'MinIO initialized successfully'
       "
 
-  # PostgreSQL for integration testing (alternative to SQLite)
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_DB: storage_test
-      POSTGRES_USER: test_user
-      POSTGRES_PASSWORD: test_password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U test_user -d storage_test"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Storage service for integration testing
-  storage-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    depends_on:
-      minio:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    environment:
-      FLASK_ENV: testing
-      DATABASE_URL: postgresql://test_user:test_password@postgres:5432/storage_test
-      MINIO_SERVICE_URL: http://minio:9000
-      MINIO_PUBLIC_URL: http://localhost:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET_NAME: storage-test
-      JWT_SECRET: test_jwt_secret_key_for_integration_testing
-      REDIS_URL: redis://redis:6379/0
-      WAIT_FOR_DB: "false"
-      RUN_MIGRATIONS: "true"
-      APP_MODE: "development"
-    ports:
-      - "5000:5000"
-    volumes:
-      - ./tests:/app/tests
-      - ./migrations:/app/migrations
-
 volumes:
   minio_data:
-  postgres_data:
 
 networks:
   default:
