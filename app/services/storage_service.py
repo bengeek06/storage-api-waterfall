@@ -45,7 +45,9 @@ class StorageBackendService:
         )
 
     def generate_upload_url(
-        self, storage_key: str, content_type: Optional[str] = None  # pylint: disable=unused-argument
+        self,
+        storage_key: str,
+        content_type: Optional[str] = None,  # pylint: disable=unused-argument
     ) -> Tuple[str, int]:
         """
         Generate a presigned URL for file upload directly to MinIO.
