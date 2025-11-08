@@ -47,14 +47,9 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # MinIO/S3 Storage configuration
-    MINIO_SERVICE_URL = os.environ.get("MINIO_SERVICE_URL")
-    if not MINIO_SERVICE_URL:
-        raise ValueError(MINIO_SERVICE_URL_ERROR)
-
-    # Project service URL for access control
-    PROJECT_SERVICE_URL = os.environ.get("PROJECT_SERVICE_URL")
-    if not PROJECT_SERVICE_URL:
-        raise ValueError(PROJECT_SERVICE_URL_ERROR)
+    # Use default values for testing, but require in production
+    MINIO_SERVICE_URL = os.environ.get("MINIO_SERVICE_URL", "http://localhost:9000")
+    PROJECT_SERVICE_URL = os.environ.get("PROJECT_SERVICE_URL", "http://localhost:5001")
 
 
 class DevelopmentConfig(Config):
@@ -91,3 +86,9 @@ class ProductionConfig(Config):
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
     if not SQLALCHEMY_DATABASE_URI:
         raise ValueError(DATABASE_URL_ERROR)
+    
+    # Strict validation for production - no defaults allowed
+    if not os.environ.get("MINIO_SERVICE_URL"):
+        raise ValueError(MINIO_SERVICE_URL_ERROR)
+    if not os.environ.get("PROJECT_SERVICE_URL"):
+        raise ValueError(PROJECT_SERVICE_URL_ERROR)
