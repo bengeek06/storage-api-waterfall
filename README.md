@@ -53,6 +53,38 @@ You can use `env.example` as a template for your environment files.
 
 ---
 
+## 🔌 Intégrations
+
+### Service Identity - Upload Avatar
+
+Le service Identity peut utiliser le Storage Service pour gérer les avatars utilisateur.
+
+📖 **Documentation complète :** [`docs/IDENTITY_INTEGRATION.md`](docs/IDENTITY_INTEGRATION.md)
+
+**Quick Start :**
+```python
+# Helper prêt à l'emploi dans docs/identity_helper.py
+from identity_helper import upload_user_avatar
+
+result = upload_user_avatar(
+    user_id="uuid",
+    company_id="uuid", 
+    file_data=avatar_bytes,
+    content_type="image/jpeg",
+    filename="avatar.jpg"
+)
+
+# Stocker en DB
+user.avatar_object_key = result['object_key']
+```
+
+**Workflow :**
+1. POST `/upload/presign` → obtenir URL pré-signée
+2. PUT sur MinIO → upload direct du binaire
+3. Stocker `object_key` ou triplet `(bucket_type, bucket_id, logical_path)` en DB
+
+---
+
 ## 🧩 Architecture
 
 ```

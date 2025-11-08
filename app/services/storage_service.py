@@ -52,38 +52,68 @@ class StorageBackendService:
         self, storage_key: str, content_type: Optional[str] = None
     ) -> Tuple[str, int]:
         """
-        Generate a URL for file upload to storage service (not MinIO directly).
+        Generate a presigned URL for file upload directly to MinIO.
 
         Args:
             storage_key (str): Unique storage key for the file.
             content_type (str, optional): MIME type of the file.
 
         Returns:
-            tuple: (upload_url, expires_in_seconds)
+            tuple: (presigned_url, expires_in_seconds)
         """
-        # Generate a unique upload token
-        upload_token = str(uuid.uuid4())
+        from datetime import timedelta
+        
+        # Ensure bucket exists
+        if not self.minio_client.bucket_exists(self.bucket_name):
+            self.minio_client.make_bucket(self.bucket_name)
+        
+        # Generate presigned PUT URL
+        presigned_url = self.minio_client.presigned_put_object(
+            bucket_name=self.bucket_name,
+            object_name=storage_key,
+            expires=timedelta(seconds=self.default_expiry)
+        )
+        
+        return presigned_url, self.default_expiry
 
-        # Create upload URL pointing to storage service endpoint
-        upload_url = f"{self.public_url}/storage/upload/{upload_token}?storage_key={storage_key}"
-        if content_type:
-            upload_url += f"&content_type={content_type}"
-
-        return upload_url, self.default_expiry
-
-    def generate_download_url(self, storage_key: str) -> Tuple[str, int]:
+    def generate_download_url(self, storage_key: str, expires_in: int = None) -> Tuple[str, int]:
         """
-        Generate a presigned URL for file download.
+        Generate a presigned URL for file download directly from MinIO.
+
+        Args:
+            storage_key (str): Storage key of the file.
+            expires_in (int, optional): Expiration time in seconds.
+
+        Returns:
+            tuple: (presigned_url, expires_in_seconds)
+        """
+        from datetime import timedelta
+        
+        expiry = expires_in or self.default_expiry
+        
+        # Generate presigned GET URL
+        presigned_url = self.minio_client.presigned_get_object(
+            bucket_name=self.bucket_name,
+            object_name=storage_key,
+            expires=timedelta(seconds=expiry)
+        )
+        
+        return presigned_url, expiry
+    
+    def get_object(self, storage_key: str):
+        """
+        Get an object from MinIO for streaming.
 
         Args:
             storage_key (str): Storage key of the file.
 
         Returns:
-            tuple: (presigned_url, expires_in_seconds)
+            HTTPResponse: MinIO response object for streaming.
         """
-        # In production, this would use boto3 or minio-py to generate actual presigned URLs
-        presigned_url = f"{self.public_url}/storage/download/{storage_key}?token={uuid.uuid4()}"
-        return presigned_url, self.default_expiry
+        return self.minio_client.get_object(
+            bucket_name=self.bucket_name,
+            object_name=storage_key
+        )
 
     def copy_object(self, _source_key: str, _destination_key: str) -> bool:
         """

@@ -36,6 +36,15 @@ from app.resources.storage_validation import (
 # Storage upload/download resources
 from app.resources.storage_bucket_upload_download import (
     BucketPresignedUrlResource,
+    BucketUploadProxyResource,
+    BucketDownloadPresignResource,
+    BucketDownloadProxyResource,
+)
+
+# Storage admin resources
+from app.resources.storage_admin import (
+    FileDeleteResource,
+    LocksListResource,
 )
 
 
@@ -63,16 +72,17 @@ def register_routes(app):
 
     # Upload operations
     api.add_resource(BucketPresignedUrlResource, "/upload/presign")
-    # Note: /upload/proxy endpoint not yet implemented
+    api.add_resource(BucketUploadProxyResource, "/upload/proxy")
 
     # Download operations
-    # Note: /download/presign and /download/proxy endpoints not yet implemented
+    api.add_resource(BucketDownloadPresignResource, "/download/presign")
+    api.add_resource(BucketDownloadProxyResource, "/download/proxy")
 
     # File operations
     api.add_resource(FileCopyResource, "/copy")
     api.add_resource(FileLockResource, "/lock")
     api.add_resource(FileUnlockResource, "/unlock")
-    # Note: /locks endpoint not yet implemented
+    api.add_resource(LocksListResource, "/locks")
 
     # Version management and validation workflow
     api.add_resource(VersionListResource, "/versions")
@@ -85,7 +95,9 @@ def register_routes(app):
         VersionRejectResource, "/versions/<string:version_id>/reject"
     )
 
-    # Note: /delete endpoint not yet implemented
+    # Administration
+    api.add_resource(FileDeleteResource, "/delete")
+
     # Note: Metadata endpoint path corrected to match OpenAPI spec
 
     logger.info("Routes registered successfully.")
