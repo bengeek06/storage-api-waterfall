@@ -158,7 +158,7 @@ Exemple de structure :
 | URL pré-signée upload | `POST /upload/presign` | Génère une URL pour upload direct |
 | Upload via proxy | `POST /upload/proxy` | Upload via le service (multipart) |
 | **Download** | | |
-| URL pré-signée download | `POST /download/presign` | Génère une URL pour download direct |
+| URL pré-signée download | `GET /download/presign` | Génère une URL pour download direct |
 | Download via proxy | `GET /download/proxy` | Download via le service |
 | **Collaboration** | | |
 | Copier un fichier | `POST /copy` | Copie vers workspace utilisateur |
@@ -174,6 +174,508 @@ Exemple de structure :
 | Supprimer fichier | `DELETE /delete` | Supprime définitivement |
 
 See [`openapi.yml`](openapi.yml) for full documentation and schema details.
+
+### Détails des endpoints Upload/Download
+
+#### POST `/upload/presign` - Obtenir une URL pré-signée pour upload
+
+**Description** : Génère une URL pré-signée MinIO pour permettre un upload direct depuis le client (évite de passer par le proxy du service).
+
+**Requête** :
+```http
+POST /upload/presign
+Content-Type: application/json
+Cookie: <JWT token>
+
+{
+  "bucket_type": "users|companies|projects",
+  "bucket_id": "uuid",
+  "logical_path": "/documents/report.pdf",
+  "content_type": "application/pdf"  // optionnel
+}
+```
+
+**Réponse succès (200)** :
+```json
+{
+  "status": "success",
+  "upload_url": "https://minio:9000/users-files/uuid/documents/report.pdf?X-Amz-Signature=...",
+  "expires_in": 900,
+  "object_key": "uuid/documents/report.pdf",
+  "file_id": "uuid-of-file-record"
+}
+```
+
+**Erreurs** :
+- `400` : Paramètres manquants ou invalides
+- `401` : JWT manquant ou invalide
+- `403` : Accès refusé au bucket (permissions insuffisantes)
+- `500` : Erreur MinIO
+
+**Utilisation** :
+```bash
+# 1. Obtenir l'URL pré-signée
+curl -X POST http://localhost:5000/upload/presign \
+  -H "Content-Type: application/json" \
+  -H "Cookie: jwt_token=..." \
+  -d '{"bucket_type":"users","bucket_id":"uuid","logical_path":"/docs/file.pdf"}'
+
+# 2. Uploader directement sur MinIO
+curl -X PUT "<upload_url>" \
+  -H "Content-Type: application/pdf" \
+  --data-binary @file.pdf
+```
+
+---
+
+#### POST `/upload/proxy` - Upload via le service
+
+**Description** : Upload un fichier en passant par le service (multipart/form-data). Le service transfère le fichier vers MinIO et crée les métadonnées.
+
+**Requête** :
+```http
+POST /upload/proxy
+Content-Type: multipart/form-data
+Cookie: <JWT token>
+
+bucket_type=users
+bucket_id=uuid
+logical_path=/documents/report.pdf
+file=@report.pdf
+```
+
+**Réponse succès (200)** :
+```json
+{
+  "status": "success",
+  "message": "File uploaded successfully",
+  "file_id": "uuid",
+  "object_key": "uuid/documents/report.pdf",
+  "version_id": "uuid-version",
+  "size": 524288
+}
+```
+
+**Erreurs** :
+- `400` : Fichier manquant, paramètres invalides
+- `401` : JWT manquant ou invalide
+- `403` : Accès refusé au bucket
+- `413` : Fichier trop volumineux
+- `500` : Erreur MinIO ou base de données
+
+**Utilisation** :
+```bash
+curl -X POST http://localhost:5000/upload/proxy \
+  -H "Cookie: jwt_token=..." \
+  -F "bucket_type=users" \
+  -F "bucket_id=uuid" \
+  -F "logical_path=/docs/file.pdf" \
+  -F "file=@file.pdf"
+```
+
+---
+
+#### GET `/download/presign` - Obtenir une URL pré-signée pour download
+
+**Description** : Génère une URL pré-signée MinIO pour permettre un téléchargement direct depuis le client.
+
+**Requête** :
+```http
+GET /download/presign?bucket_type=users&bucket_id=uuid&logical_path=/documents/report.pdf
+Cookie: <JWT token>
+```
+
+**Paramètres query** :
+- `bucket_type` (requis) : `users`, `companies`, ou `projects`
+- `bucket_id` (requis) : UUID du propriétaire
+- `logical_path` (requis) : Chemin du fichier
+- `version_id` (optionnel) : UUID d'une version spécifique
+
+**Réponse succès (200)** :
+```json
+{
+  "status": "success",
+  "download_url": "https://minio:9000/users-files/uuid/documents/report.pdf?X-Amz-Signature=...",
+  "expires_in": 900,
+  "file_id": "uuid",
+  "filename": "report.pdf",
+  "size": 524288
+}
+```
+
+**Erreurs** :
+- `400` : Paramètres manquants
+- `401` : JWT manquant ou invalide
+- `403` : Accès refusé au fichier
+- `404` : Fichier introuvable
+- `500` : Erreur MinIO
+
+**Utilisation** :
+```bash
+# 1. Obtenir l'URL pré-signée
+curl -X GET "http://localhost:5000/download/presign?bucket_type=users&bucket_id=uuid&logical_path=/docs/file.pdf" \
+  -H "Cookie: jwt_token=..."
+
+# 2. Télécharger directement depuis MinIO
+curl -X GET "<download_url>" -o file.pdf
+```
+
+---
+
+#### GET `/download/proxy` - Télécharger via le service
+
+**Description** : Télécharge un fichier en passant par le service (streaming). Le service récupère le fichier depuis MinIO et le transmet au client.
+
+**Requête** :
+```http
+GET /download/proxy?bucket_type=users&bucket_id=uuid&logical_path=/documents/report.pdf
+Cookie: <JWT token>
+```
+
+**Paramètres query** :
+- `bucket_type` (requis) : `users`, `companies`, ou `projects`
+- `bucket_id` (requis) : UUID du propriétaire
+- `logical_path` (requis) : Chemin du fichier
+- `version_id` (optionnel) : UUID d'une version spécifique
+
+**Réponse succès (200)** :
+```http
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="report.pdf"
+Content-Length: 524288
+
+<binary data>
+```
+
+**Erreurs** :
+- `400` : Paramètres manquants
+- `401` : JWT manquant ou invalide
+- `403` : Accès refusé au fichier
+- `404` : Fichier introuvable
+- `500` : Erreur MinIO
+
+**Utilisation** :
+```bash
+curl -X GET "http://localhost:5000/download/proxy?bucket_type=users&bucket_id=uuid&logical_path=/docs/file.pdf" \
+  -H "Cookie: jwt_token=..." \
+  -o file.pdf
+```
+
+---
+
+#### DELETE `/delete` - Supprimer un fichier
+
+**Description** : Supprime définitivement un fichier (métadonnées + binaire MinIO). Effectue d'abord une suppression logique (status='archived'), puis suppression physique si demandée.
+
+**Requête** :
+```http
+DELETE /delete
+Content-Type: application/json
+Cookie: <JWT token>
+
+{
+  "bucket_type": "users|companies|projects",
+  "bucket_id": "uuid",
+  "logical_path": "/documents/report.pdf",
+  "force": false,  // optionnel, défaut: false
+  "physical": false  // optionnel, défaut: false
+}
+```
+
+**Paramètres** :
+- `force` : Si `true`, supprime même si le fichier est verrouillé
+- `physical` : Si `true`, supprime aussi le binaire de MinIO (irréversible)
+
+**Réponse succès (200)** :
+```json
+{
+  "status": "success",
+  "message": "File archived successfully",
+  "file_id": "uuid",
+  "archived": true,
+  "physical_deletion": false
+}
+```
+
+**Avec `physical=true`** :
+```json
+{
+  "status": "success",
+  "message": "File permanently deleted",
+  "file_id": "uuid",
+  "archived": true,
+  "physical_deletion": true,
+  "versions_deleted": 3
+}
+```
+
+**Erreurs** :
+- `400` : Paramètres manquants
+- `401` : JWT manquant ou invalide
+- `403` : Accès refusé (permissions insuffisantes ou fichier verrouillé sans `force`)
+- `404` : Fichier introuvable
+- `500` : Erreur MinIO ou base de données
+
+**Utilisation** :
+```bash
+# Suppression logique (archive)
+curl -X DELETE http://localhost:5000/delete \
+  -H "Content-Type: application/json" \
+  -H "Cookie: jwt_token=..." \
+  -d '{"bucket_type":"users","bucket_id":"uuid","logical_path":"/docs/file.pdf"}'
+
+# Suppression physique définitive
+curl -X DELETE http://localhost:5000/delete \
+  -H "Content-Type: application/json" \
+  -H "Cookie: jwt_token=..." \
+  -d '{"bucket_type":"users","bucket_id":"uuid","logical_path":"/docs/file.pdf","physical":true}'
+```
+
+---
+
+#### GET `/locks` - Lister les fichiers verrouillés
+
+**Description** : Liste tous les fichiers verrouillés dans un bucket, avec possibilité de filtrage par chemin.
+
+**Requête** :
+```http
+GET /locks?bucket_type=users&bucket_id=uuid&path_prefix=/documents/
+Cookie: <JWT token>
+```
+
+**Paramètres query** :
+- `bucket_type` (requis) : `users`, `companies`, ou `projects`
+- `bucket_id` (requis) : UUID du propriétaire
+- `path_prefix` (optionnel) : Filtre les fichiers par préfixe de chemin
+
+**Réponse succès (200)** :
+```json
+{
+  "status": "success",
+  "locks": [
+    {
+      "file_id": "uuid1",
+      "logical_path": "/documents/report.pdf",
+      "locked_by": "uuid-user",
+      "locked_by_username": "john.doe@example.com",
+      "locked_at": "2024-01-15T10:30:00Z",
+      "current_version_id": "uuid-version"
+    },
+    {
+      "file_id": "uuid2",
+      "logical_path": "/documents/specs.docx",
+      "locked_by": "uuid-user2",
+      "locked_by_username": "jane.smith@example.com",
+      "locked_at": "2024-01-16T14:20:00Z",
+      "current_version_id": "uuid-version2"
+    }
+  ],
+  "total": 2
+}
+```
+
+**Erreurs** :
+- `400` : Paramètres manquants
+- `401` : JWT manquant ou invalide
+- `403` : Accès refusé au bucket
+- `500` : Erreur base de données
+
+**Utilisation** :
+```bash
+# Lister tous les fichiers verrouillés dans un bucket
+curl -X GET "http://localhost:5000/locks?bucket_type=projects&bucket_id=uuid" \
+  -H "Cookie: jwt_token=..."
+
+# Lister les fichiers verrouillés dans un sous-dossier
+curl -X GET "http://localhost:5000/locks?bucket_type=projects&bucket_id=uuid&path_prefix=/designs/" \
+  -H "Cookie: jwt_token=..."
+```
+
+---
+
+## 🔄 Workflows typiques
+
+### 📁 1. Upload direct avec URL pré-signée
+
+```bash
+# Étape 1 : Obtenir URL pré-signée
+curl -X POST http://localhost:5000/upload/presign \
+  -H "Content-Type: application/json" \
+  -H "Cookie: jwt_token=..." \
+  -d '{
+    "bucket_type": "projects",
+    "bucket_id": "5678",
+    "logical_path": "/docs/specifications_v1.pdf",
+    "content_type": "application/pdf"
+  }'
+
+# Réponse
+{
+  "status": "success",
+  "upload_url": "https://minio:9000/projects-files/5678/docs/specifications_v1.pdf?X-Amz-Signature=...",
+  "expires_in": 900,
+  "object_key": "5678/docs/specifications_v1.pdf",
+  "file_id": "uuid"
+}
+
+# Étape 2 : Upload direct sur MinIO
+curl -X PUT "<upload_url>" \
+  -H "Content-Type: application/pdf" \
+  --data-binary @specifications_v1.pdf
+```
+
+### 📁 2. Upload via proxy (plus simple, mais plus lent)
+
+```bash
+curl -X POST http://localhost:5000/upload/proxy \
+  -H "Cookie: jwt_token=..." \
+  -F "bucket_type=projects" \
+  -F "bucket_id=5678" \
+  -F "logical_path=/docs/specifications_v1.pdf" \
+  -F "file=@specifications_v1.pdf"
+
+# Réponse
+{
+  "status": "success",
+  "message": "File uploaded successfully",
+  "file_id": "uuid",
+  "object_key": "5678/docs/specifications_v1.pdf",
+  "version_id": "uuid-version",
+  "size": 524288
+}
+```
+
+### 📥 3. Téléchargement direct avec URL pré-signée
+
+```bash
+# Étape 1 : Obtenir URL pré-signée
+curl -X GET "http://localhost:5000/download/presign?bucket_type=projects&bucket_id=5678&logical_path=/docs/specifications_v1.pdf" \
+  -H "Cookie: jwt_token=..."
+
+# Réponse
+{
+  "status": "success",
+  "download_url": "https://minio:9000/projects-files/5678/docs/specifications_v1.pdf?X-Amz-Signature=...",
+  "expires_in": 900,
+  "file_id": "uuid",
+  "filename": "specifications_v1.pdf",
+  "size": 524288
+}
+
+# Étape 2 : Télécharger depuis MinIO
+curl -X GET "<download_url>" -o specifications_v1.pdf
+```
+
+### 📥 4. Téléchargement via proxy
+
+```bash
+curl -X GET "http://localhost:5000/download/proxy?bucket_type=projects&bucket_id=5678&logical_path=/docs/specifications_v1.pdf" \
+  -H "Cookie: jwt_token=..." \
+  -o specifications_v1.pdf
+```
+
+### 🔒 5. Copier un fichier projet vers le répertoire personnel (lock automatique)
+
+```http
+POST /copy
+Content-Type: application/json
+Cookie: <JWT token>
+
+{
+  "source_bucket": "projects",
+  "source_path": "/projects/5678/docs/specifications_v1.pdf",
+  "target_bucket": "users",
+  "target_path": "/users/1234/work/specifications_v1.pdf"
+}
+```
+
+### ✏️ 6. Modifier le fichier localement et créer une nouvelle version
+
+```http
+POST /versions/commit
+Content-Type: application/json
+Cookie: <JWT token>
+
+{
+  "source_bucket": "users",
+  "source_path": "/users/1234/work/specifications_v1.pdf",
+  "target_bucket": "projects", 
+  "target_path": "/projects/5678/docs/specifications_v1.pdf",
+  "message": "Updated specifications with new requirements"
+}
+```
+
+### ✅ 7. Approuver une version
+
+```http
+POST /versions/{version_id}/approve
+Content-Type: application/json
+Cookie: <JWT token>
+
+{
+  "comment": "Changes approved by team lead"
+}
+```
+
+### 🗑️ 8. Supprimer un fichier
+
+```bash
+# Suppression logique (archive)
+curl -X DELETE http://localhost:5000/delete \
+  -H "Content-Type: application/json" \
+  -H "Cookie: jwt_token=..." \
+  -d '{
+    "bucket_type": "projects",
+    "bucket_id": "5678",
+    "logical_path": "/docs/old_file.pdf"
+  }'
+
+# Suppression physique définitive (irréversible)
+curl -X DELETE http://localhost:5000/delete \
+  -H "Content-Type: application/json" \
+  -H "Cookie: jwt_token=..." \
+  -d '{
+    "bucket_type": "projects",
+    "bucket_id": "5678",
+    "logical_path": "/docs/old_file.pdf",
+    "physical": true
+  }'
+```
+
+### 🗝️ 9. Gérer les verrous
+
+```bash
+# Lister les fichiers verrouillés
+curl -X GET "http://localhost:5000/locks?bucket_type=projects&bucket_id=5678" \
+  -H "Cookie: jwt_token=..."
+
+# Réponse
+{
+  "status": "success",
+  "locks": [
+    {
+      "file_id": "uuid",
+      "logical_path": "/docs/specifications_v1.pdf",
+      "locked_by": "uuid-user",
+      "locked_by_username": "john.doe@example.com",
+      "locked_at": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "total": 1
+}
+
+# Forcer un unlock
+curl -X POST http://localhost:5000/unlock \
+  -H "Content-Type: application/json" \
+  -H "Cookie: jwt_token=..." \
+  -d '{
+    "bucket": "projects",
+    "path": "/projects/5678/docs/specifications_v1.pdf",
+    "force": true
+  }'
+```
+
+---
 
 ## Project Structure
 
