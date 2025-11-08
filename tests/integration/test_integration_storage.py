@@ -99,7 +99,10 @@ class TestStorageIntegration:
         assert "object_key" in data
         assert data["expires_in"] > 0
         # URL is a MinIO presigned URL (contains localhost:9000 or X-Amz-Signature)
-        assert ("localhost:9000" in data["url"].lower() or "x-amz-signature" in data["url"].lower())
+        assert (
+            "localhost:9000" in data["url"].lower()
+            or "x-amz-signature" in data["url"].lower()
+        )
 
     def test_upload_presign_invalid_path(self, client):
         """Test presigned upload with invalid path."""
@@ -573,7 +576,9 @@ class TestStorageIntegration:
         test_user_id = str(uuid.uuid4())
         test_company_id = str(uuid.uuid4())
         test_project_id = str(uuid.uuid4())
-        test_creator_id = str(uuid.uuid4())  # Different user who created the version
+        test_creator_id = str(
+            uuid.uuid4()
+        )  # Different user who created the version
 
         # Create a file with pending version
         with app.app_context():
@@ -625,7 +630,9 @@ class TestStorageIntegration:
         test_user_id = str(uuid.uuid4())
         test_company_id = str(uuid.uuid4())
         test_project_id = str(uuid.uuid4())
-        test_creator_id = str(uuid.uuid4())  # Different user who created the version
+        test_creator_id = str(
+            uuid.uuid4()
+        )  # Different user who created the version
 
         # Create a file with pending version
         with app.app_context():
@@ -751,4 +758,3 @@ class TestStorageIntegration:
         )
 
         assert response.status_code in [400, 500]
-

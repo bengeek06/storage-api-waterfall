@@ -12,8 +12,9 @@ Resources:
     - BucketDownloadProxyResource: Stream download via proxy
 """
 
+from io import BytesIO
 from datetime import datetime, timezone, timedelta
-from flask import request, g, Response, stream_with_context
+from flask import request, g, Response
 from flask.views import MethodView
 from flask_restful import Resource
 from marshmallow import ValidationError
@@ -162,13 +163,14 @@ class BucketPresignedUrlResource(Resource):
 
 class BucketUploadProxyResource(MethodView):
     """MethodView for uploading files via multipart/form-data proxy.
-    
+
     Uses MethodView instead of Resource to properly handle multipart/form-data
     which Flask-RESTful doesn't handle well by default.
     """
+
     decorators = [require_jwt_auth()]
 
-    def post(self):
+    def post(self):  # pylint: disable=too-many-locals
         """
         Upload a file via multipart proxy (alternative to presigned URL).
 
@@ -197,14 +199,14 @@ class BucketUploadProxyResource(MethodView):
                     error_schema.dump(
                         {
                             "error": "MISSING_FIELDS",
-                            "message": "bucket_type, bucket_id, and logical_path are required"
+                            "message": "bucket_type, bucket_id, and logical_path are required",
                         }
                     ),
                     400,
                 )
 
             # Check if file is in request
-            if 'file' not in request.files:
+            if "file" not in request.files:
                 return (
                     error_schema.dump(
                         {"error": "NO_FILE", "message": NO_FILE_PROVIDED}
@@ -212,43 +214,47 @@ class BucketUploadProxyResource(MethodView):
                     400,
                 )
 
-            file_obj = request.files['file']
-            if file_obj.filename == '':
+            file_obj = request.files["file"]
+            if file_obj.filename == "":
                 return (
                     error_schema.dump(
-                        {"error": "EMPTY_FILENAME", "message": "No file selected"}
+                        {
+                            "error": "EMPTY_FILENAME",
+                            "message": "No file selected",
+                        }
                     ),
                     400,
                 )
 
             # Get current user info
             user_id = g.user_id
-            company_id = g.company_id
+            _ = g.company_id  # Not used for this endpoint
 
             # Check bucket access (write permission)
             allowed, error_msg, status_code = check_bucket_access(
-                bucket_type=bucket_type,
-                bucket_id=bucket_id,
-                action="write"
+                bucket_type=bucket_type, bucket_id=bucket_id, action="write"
             )
-            
+
             if not allowed:
                 return (
                     error_schema.dump(
-                        {"error": "ACCESS_DENIED", "message": error_msg or ACCESS_DENIED}
+                        {
+                            "error": "ACCESS_DENIED",
+                            "message": error_msg or ACCESS_DENIED,
+                        }
                     ),
                     status_code,
                 )
 
             # Secure the filename
             filename = secure_filename(file_obj.filename)
-            content_type = file_obj.content_type or 'application/octet-stream'
+            content_type = file_obj.content_type or "application/octet-stream"
 
             # Find or create the file record
             storage_file = StorageFile.query.filter_by(
                 bucket_type=bucket_type,
                 bucket_id=bucket_id,
-                logical_path=logical_path
+                logical_path=logical_path,
             ).first()
 
             if not storage_file:
@@ -259,29 +265,30 @@ class BucketUploadProxyResource(MethodView):
                     logical_path=logical_path,
                     filename=filename,
                     owner_id=user_id,
-                    status="approved"
+                    status="approved",
                 )
                 db.session.add(storage_file)
                 db.session.flush()  # Get the file ID
 
             # Generate next version number
             next_version = storage_file.get_next_version_number()
-            
+
             # Construct object key
-            object_key = f"{bucket_type}/{bucket_id}/{logical_path}/{next_version}"
+            object_key = (
+                f"{bucket_type}/{bucket_id}/{logical_path}/{next_version}"
+            )
 
             # Upload to MinIO directly
             file_data = file_obj.read()
             file_size = len(file_data)
-            
+
             # Upload using MinIO client
-            from io import BytesIO
             storage_backend.minio_client.put_object(
                 bucket_name=storage_backend.bucket_name,
                 object_name=object_key,
                 data=BytesIO(file_data),
                 length=file_size,
-                content_type=content_type
+                content_type=content_type,
             )
 
             # Create version record
@@ -292,7 +299,7 @@ class BucketUploadProxyResource(MethodView):
                 created_by=user_id,
                 status="draft",  # Use draft for FileVersion (not approved)
                 size=file_size,
-                mime_type=content_type
+                mime_type=content_type,
             )
             db.session.add(file_version)
             db.session.flush()  # Flush to generate file_version.id
@@ -300,7 +307,7 @@ class BucketUploadProxyResource(MethodView):
             # Update current version
             storage_file.current_version_id = file_version.id
             storage_file.updated_at = datetime.now(timezone.utc)
-            
+
             db.session.commit()
 
             # Log the action
@@ -314,7 +321,7 @@ class BucketUploadProxyResource(MethodView):
                     "filename": filename,
                     "size": file_size,
                     "content_type": content_type,
-                    "object_key": object_key
+                    "object_key": object_key,
                 },
                 ip_address=request.remote_addr,
                 user_agent=request.headers.get("User-Agent"),
@@ -334,16 +341,18 @@ class BucketUploadProxyResource(MethodView):
                             "version_number": next_version,
                             "object_key": object_key,
                             "size": file_size,
-                            "filename": filename
-                        }
+                            "filename": filename,
+                        },
                     }
                 ),
                 201,
             )
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             db.session.rollback()
-            logger.error(f"Error uploading file via proxy: {str(e)}", exc_info=True)
+            logger.error(
+                f"Error uploading file via proxy: {str(e)}", exc_info=True
+            )
             return (
                 error_schema.dump(
                     {
@@ -382,16 +391,22 @@ class BucketDownloadPresignResource(Resource):
 
             # Get current user info from g
             user_id = g.user_id
-            company_id = g.company_id
+            _ = g.company_id  # Not used for this endpoint
 
             # Check bucket access (read permission)
-            allowed, error_msg, status_code = check_bucket_access(bucket_type=data["bucket_type"], bucket_id=data["bucket_id"], action="read"
+            allowed, error_msg, status_code = check_bucket_access(
+                bucket_type=data["bucket_type"],
+                bucket_id=data["bucket_id"],
+                action="read",
             )
-            
+
             if not allowed:
                 return (
                     error_schema.dump(
-                        {"error": "ACCESS_DENIED", "message": error_msg or ACCESS_DENIED}
+                        {
+                            "error": "ACCESS_DENIED",
+                            "message": error_msg or ACCESS_DENIED,
+                        }
                     ),
                     status_code,
                 )
@@ -400,7 +415,7 @@ class BucketDownloadPresignResource(Resource):
             file_obj = StorageFile.query.filter_by(
                 bucket_type=data["bucket_type"],
                 bucket_id=data["bucket_id"],
-                logical_path=data["logical_path"]
+                logical_path=data["logical_path"],
             ).first()
 
             if not file_obj or file_obj.status == "archived":
@@ -417,20 +432,22 @@ class BucketDownloadPresignResource(Resource):
                     error_schema.dump(
                         {
                             "error": "NO_VERSION",
-                            "message": "File has no current version"
+                            "message": "File has no current version",
                         }
                     ),
                     404,
                 )
 
             # Get current version object
-            current_version = FileVersion.query.get(file_obj.current_version_id)
+            current_version = FileVersion.query.get(
+                file_obj.current_version_id
+            )
             if not current_version:
                 return (
                     error_schema.dump(
                         {
                             "error": "VERSION_NOT_FOUND",
-                            "message": "Current version not found"
+                            "message": "Current version not found",
                         }
                     ),
                     404,
@@ -442,8 +459,7 @@ class BucketDownloadPresignResource(Resource):
             # Generate presigned URL using storage backend
             download_url, actual_expires_in = (
                 storage_backend.generate_download_url(
-                    storage_key=object_key,
-                    expires_in=expires_in
+                    storage_key=object_key, expires_in=expires_in
                 )
             )
 
@@ -456,7 +472,7 @@ class BucketDownloadPresignResource(Resource):
                 details={
                     "method": "presigned_url",
                     "object_key": object_key,
-                    "expires_in": actual_expires_in
+                    "expires_in": actual_expires_in,
                 },
                 ip_address=request.remote_addr,
                 user_agent=request.headers.get("User-Agent"),
@@ -480,7 +496,9 @@ class BucketDownloadPresignResource(Resource):
             )
 
         except ValidationError as e:
-            logger.warning(f"Validation error in download presign: {e.messages}")
+            logger.warning(
+                f"Validation error in download presign: {e.messages}"
+            )
             return (
                 error_schema.dump(
                     {
@@ -533,16 +551,22 @@ class BucketDownloadProxyResource(Resource):
 
             # Get current user info from g
             user_id = g.user_id
-            company_id = g.company_id
+            _ = g.company_id  # Not used for this endpoint
 
             # Check bucket access (read permission)
-            allowed, error_msg, status_code = check_bucket_access(bucket_type=data["bucket_type"], bucket_id=data["bucket_id"], action="read"
+            allowed, error_msg, status_code = check_bucket_access(
+                bucket_type=data["bucket_type"],
+                bucket_id=data["bucket_id"],
+                action="read",
             )
-            
+
             if not allowed:
                 return (
                     error_schema.dump(
-                        {"error": "ACCESS_DENIED", "message": error_msg or ACCESS_DENIED}
+                        {
+                            "error": "ACCESS_DENIED",
+                            "message": error_msg or ACCESS_DENIED,
+                        }
                     ),
                     status_code,
                 )
@@ -551,7 +575,7 @@ class BucketDownloadProxyResource(Resource):
             file_obj = StorageFile.query.filter_by(
                 bucket_type=data["bucket_type"],
                 bucket_id=data["bucket_id"],
-                logical_path=data["logical_path"]
+                logical_path=data["logical_path"],
             ).first()
 
             if not file_obj or file_obj.status == "archived":
@@ -568,20 +592,22 @@ class BucketDownloadProxyResource(Resource):
                     error_schema.dump(
                         {
                             "error": "NO_VERSION",
-                            "message": "File has no current version"
+                            "message": "File has no current version",
                         }
                     ),
                     404,
                 )
 
             # Get current version object
-            current_version = FileVersion.query.get(file_obj.current_version_id)
+            current_version = FileVersion.query.get(
+                file_obj.current_version_id
+            )
             if not current_version:
                 return (
                     error_schema.dump(
                         {
                             "error": "VERSION_NOT_FOUND",
-                            "message": "Current version not found"
+                            "message": "Current version not found",
                         }
                     ),
                     404,
@@ -598,10 +624,7 @@ class BucketDownloadProxyResource(Resource):
                 version_id=file_obj.current_version_id,
                 action="download",
                 user_id=user_id,
-                details={
-                    "method": "proxy_stream",
-                    "object_key": object_key
-                },
+                details={"method": "proxy_stream", "object_key": object_key},
                 ip_address=request.remote_addr,
                 user_agent=request.headers.get("User-Agent"),
             )
@@ -611,8 +634,7 @@ class BucketDownloadProxyResource(Resource):
             # Stream the file
             def generate():
                 try:
-                    for chunk in response.stream(amt=8192):
-                        yield chunk
+                    yield from response.stream(amt=8192)
                 finally:
                     response.close()
                     response.release_conn()
@@ -620,7 +642,8 @@ class BucketDownloadProxyResource(Resource):
             # Determine content type
             content_type = (
                 current_version.mime_type
-                if hasattr(current_version, 'mime_type') and current_version.mime_type
+                if hasattr(current_version, "mime_type")
+                and current_version.mime_type
                 else "application/octet-stream"
             )
 
@@ -631,7 +654,7 @@ class BucketDownloadProxyResource(Resource):
                     "Content-Disposition": f'attachment; filename="{file_obj.filename}"',
                     "X-File-ID": str(file_obj.id),
                     "X-Version-ID": str(file_obj.current_version_id),
-                }
+                },
             )
 
         except ValidationError as e:
@@ -648,9 +671,7 @@ class BucketDownloadProxyResource(Resource):
             )
 
         except (ValueError, TypeError, AttributeError, LookupError) as e:
-            logger.error(
-                f"Error downloading file: {str(e)}", exc_info=True
-            )
+            logger.error(f"Error downloading file: {str(e)}", exc_info=True)
             return (
                 error_schema.dump(
                     {

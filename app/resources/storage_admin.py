@@ -38,12 +38,14 @@ lock_schema = LockSchema()
 
 class DeleteRequestSchema(Schema):
     """Schema for delete file requests."""
+
     file_id = fields.String(required=True)
     physical = fields.Boolean(load_default=False)
-    
+
 
 class LocksListRequestSchema(Schema):
     """Schema for listing locks."""
+
     bucket_type = fields.String(allow_none=True)
     bucket_id = fields.String(allow_none=True)
     file_id = fields.String(allow_none=True)
@@ -78,7 +80,7 @@ class FileDeleteResource(Resource):
 
             # Get current user info
             user_id = g.user_id
-            company_id = g.company_id
+            _ = g.company_id  # Not used for this endpoint
 
             # Find the file
             file_obj = StorageFile.get_by_file_id(data["file_id"])
@@ -94,13 +96,16 @@ class FileDeleteResource(Resource):
             allowed, error_msg, status_code = check_bucket_access(
                 bucket_type=file_obj.bucket_type,
                 bucket_id=file_obj.bucket_id,
-                action="delete"
+                action="delete",
             )
-            
+
             if not allowed:
                 return (
                     error_schema.dump(
-                        {"error": "ACCESS_DENIED", "message": error_msg or ACCESS_DENIED}
+                        {
+                            "error": "ACCESS_DENIED",
+                            "message": error_msg or ACCESS_DENIED,
+                        }
                     ),
                     status_code,
                 )
@@ -118,7 +123,7 @@ class FileDeleteResource(Resource):
                     try:
                         storage_backend.delete_object(version.object_key)
                         physical_deleted = True
-                    except Exception as e:
+                    except Exception as e:  # pylint: disable=broad-exception-caught
                         logger.warning(
                             f"Failed to delete object {version.object_key}: {e}"
                         )
@@ -126,7 +131,9 @@ class FileDeleteResource(Resource):
             db.session.commit()
 
             # Log the action for audit
-            versions_count = FileVersion.query.filter_by(file_id=file_obj.id).count()
+            versions_count = FileVersion.query.filter_by(
+                file_id=file_obj.id
+            ).count()
             AuditLog.log_action(
                 file_id=file_obj.id,
                 action="delete",
@@ -134,7 +141,7 @@ class FileDeleteResource(Resource):
                 details={
                     "logical_delete": True,
                     "physical_delete": physical_deleted,
-                    "versions_count": versions_count
+                    "versions_count": versions_count,
                 },
                 ip_address=request.remote_addr,
                 user_agent=request.headers.get("User-Agent"),
@@ -152,8 +159,8 @@ class FileDeleteResource(Resource):
                         "data": {
                             "file_id": file_obj.id,
                             "logical_delete": True,
-                            "physical_delete": physical_deleted
-                        }
+                            "physical_delete": physical_deleted,
+                        },
                     }
                 ),
                 200,
@@ -209,20 +216,22 @@ class LocksListResource(Resource):
 
             # Get current user info
             user_id = g.user_id
-            company_id = g.company_id
+            _ = g.company_id  # Not used for this endpoint
 
             # Build query
-            query = Lock.query.filter(Lock.expires_at == None)  # Active locks only
+            query = Lock.query.filter(
+                Lock.expires_at.is_(None)  # Active locks only
+            )
 
             # Apply filters
             if filters.get("file_id"):
                 query = query.filter_by(file_id=filters["file_id"])
-            
+
             if filters.get("bucket_type") and filters.get("bucket_id"):
                 # Join with StorageFile to filter by bucket
                 query = query.join(StorageFile).filter(
                     StorageFile.bucket_type == filters["bucket_type"],
-                    StorageFile.bucket_id == filters["bucket_id"]
+                    StorageFile.bucket_id == filters["bucket_id"],
                 )
 
             # Get locks
@@ -235,7 +244,7 @@ class LocksListResource(Resource):
                 allowed, _, _ = check_bucket_access(
                     bucket_type=file_obj.bucket_type,
                     bucket_id=file_obj.bucket_id,
-                    action="read"
+                    action="read",
                 )
                 if allowed:
                     accessible_locks.append(lock)
@@ -243,7 +252,9 @@ class LocksListResource(Resource):
             # Note: No audit log for list operations as there's no specific file_id
             # and AuditLog requires file_id (nullable=False)
 
-            logger.info(f"Listed {len(accessible_locks)} locks for user {user_id}")
+            logger.info(
+                f"Listed {len(accessible_locks)} locks for user {user_id}"
+            )
 
             return (
                 {
@@ -254,14 +265,18 @@ class LocksListResource(Resource):
                                 "lock_id": str(lock.id),
                                 "file_id": str(lock.file_id),
                                 "locked_by": str(lock.locked_by),
-                                "locked_at": lock.created_at.isoformat() if lock.created_at else None,
+                                "locked_at": (
+                                    lock.created_at.isoformat()
+                                    if lock.created_at
+                                    else None
+                                ),
                                 "reason": lock.reason,
-                                "lock_type": lock.lock_type
+                                "lock_type": lock.lock_type,
                             }
                             for lock in accessible_locks
                         ],
-                        "total": len(accessible_locks)
-                    }
+                        "total": len(accessible_locks),
+                    },
                 },
                 200,
             )

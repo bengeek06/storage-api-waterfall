@@ -136,8 +136,12 @@ def require_jwt_auth():
             # Store original JSON data in g without modification
             # Only parse JSON if Content-Type is application/json
             try:
-                if request.content_length and request.content_length > 0 and \
-                   request.content_type and 'application/json' in request.content_type:
+                if (
+                    request.content_length
+                    and request.content_length > 0
+                    and request.content_type
+                    and "application/json" in request.content_type
+                ):
                     g.json_data = request.get_json()
                 else:
                     g.json_data = None

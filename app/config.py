@@ -48,8 +48,12 @@ class Config:
 
     # MinIO/S3 Storage configuration
     # Use default values for testing, but require in production
-    MINIO_SERVICE_URL = os.environ.get("MINIO_SERVICE_URL", "http://localhost:9000")
-    PROJECT_SERVICE_URL = os.environ.get("PROJECT_SERVICE_URL", "http://localhost:5001")
+    MINIO_SERVICE_URL = os.environ.get(
+        "MINIO_SERVICE_URL", "http://localhost:9000"
+    )
+    PROJECT_SERVICE_URL = os.environ.get(
+        "PROJECT_SERVICE_URL", "http://localhost:5001"
+    )
 
 
 class DevelopmentConfig(Config):

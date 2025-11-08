@@ -7,8 +7,7 @@ It abstracts the storage backend implementation details.
 """
 
 import os
-import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
@@ -17,10 +16,7 @@ from minio import Minio
 
 class StorageBackendService:
     """
-    Service for interacting with MinIO/S3 storage backend.
-
-    This is a stub implementation that should be replaced with actual
-    MinIO/S3 integration in production.
+    Service layer for MinIO operations.
     """
 
     def __init__(self):
@@ -49,7 +45,7 @@ class StorageBackendService:
         )
 
     def generate_upload_url(
-        self, storage_key: str, content_type: Optional[str] = None
+        self, storage_key: str, content_type: Optional[str] = None  # pylint: disable=unused-argument
     ) -> Tuple[str, int]:
         """
         Generate a presigned URL for file upload directly to MinIO.
@@ -61,22 +57,22 @@ class StorageBackendService:
         Returns:
             tuple: (presigned_url, expires_in_seconds)
         """
-        from datetime import timedelta
-        
         # Ensure bucket exists
         if not self.minio_client.bucket_exists(self.bucket_name):
             self.minio_client.make_bucket(self.bucket_name)
-        
+
         # Generate presigned PUT URL
         presigned_url = self.minio_client.presigned_put_object(
             bucket_name=self.bucket_name,
             object_name=storage_key,
-            expires=timedelta(seconds=self.default_expiry)
+            expires=timedelta(seconds=self.default_expiry),
         )
-        
+
         return presigned_url, self.default_expiry
 
-    def generate_download_url(self, storage_key: str, expires_in: int = None) -> Tuple[str, int]:
+    def generate_download_url(
+        self, storage_key: str, expires_in: int = None
+    ) -> Tuple[str, int]:
         """
         Generate a presigned URL for file download directly from MinIO.
 
@@ -87,19 +83,17 @@ class StorageBackendService:
         Returns:
             tuple: (presigned_url, expires_in_seconds)
         """
-        from datetime import timedelta
-        
         expiry = expires_in or self.default_expiry
-        
+
         # Generate presigned GET URL
         presigned_url = self.minio_client.presigned_get_object(
             bucket_name=self.bucket_name,
             object_name=storage_key,
-            expires=timedelta(seconds=expiry)
+            expires=timedelta(seconds=expiry),
         )
-        
+
         return presigned_url, expiry
-    
+
     def get_object(self, storage_key: str):
         """
         Get an object from MinIO for streaming.
@@ -111,8 +105,7 @@ class StorageBackendService:
             HTTPResponse: MinIO response object for streaming.
         """
         return self.minio_client.get_object(
-            bucket_name=self.bucket_name,
-            object_name=storage_key
+            bucket_name=self.bucket_name, object_name=storage_key
         )
 
     def copy_object(self, _source_key: str, _destination_key: str) -> bool:

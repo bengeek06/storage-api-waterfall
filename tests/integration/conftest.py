@@ -49,9 +49,9 @@ def client(app):
     with app.app_context():
         # Create all tables
         database.create_all()
-        
+
         yield app.test_client()
-        
+
         # Cleanup after test
         database.session.remove()
         database.drop_all()
@@ -80,7 +80,10 @@ def setup_test_environment(minio_client, test_bucket_name):
     Setup and cleanup test environment for each integration test.
     """
     # Setup: Ensure buckets exist and are clean
-    for bucket_name in [test_bucket_name, "storage"]:  # storage est le bucket par défaut
+    for bucket_name in [
+        test_bucket_name,
+        "storage",
+    ]:  # storage est le bucket par défaut
         try:
             if not minio_client.bucket_exists(bucket_name):
                 minio_client.make_bucket(bucket_name)
@@ -88,7 +91,9 @@ def setup_test_environment(minio_client, test_bucket_name):
             # Clean up any existing test objects
             objects = minio_client.list_objects(bucket_name, recursive=True)
             for obj in objects:
-                if obj.object_name.startswith("integration_test_") or obj.object_name.startswith("users/"):
+                if obj.object_name.startswith(
+                    "integration_test_"
+                ) or obj.object_name.startswith("users/"):
                     minio_client.remove_object(bucket_name, obj.object_name)
         except S3Error:
             pass  # Bucket might not exist yet
@@ -100,7 +105,9 @@ def setup_test_environment(minio_client, test_bucket_name):
         try:
             objects = minio_client.list_objects(bucket_name, recursive=True)
             for obj in objects:
-                if obj.object_name.startswith("integration_test_") or obj.object_name.startswith("users/"):
+                if obj.object_name.startswith(
+                    "integration_test_"
+                ) or obj.object_name.startswith("users/"):
                     minio_client.remove_object(bucket_name, obj.object_name)
         except S3Error:
             pass
@@ -223,91 +230,93 @@ def sample_file(app, test_user_id):
     """Create a sample file in database without MinIO content."""
     with app.app_context():
         file_obj = StorageFile(
-            bucket_type='users',
+            bucket_type="users",
             bucket_id=test_user_id,
-            logical_path='test/sample.txt',
-            filename='sample.txt',
+            logical_path="test/sample.txt",
+            filename="sample.txt",
             owner_id=test_user_id,
-            status='approved'
+            status="approved",
         )
         database.session.add(file_obj)
         database.session.flush()
-        
+
         version = FileVersion(
             file_id=file_obj.id,
             version_number=1,
-            object_key=f'users/{test_user_id}/test/sample.txt/1',
+            object_key=f"users/{test_user_id}/test/sample.txt/1",
             created_by=test_user_id,
-            status='draft',
+            status="draft",
             size=100,
-            mime_type='text/plain'
+            mime_type="text/plain",
         )
         database.session.add(version)
         database.session.flush()
-        
+
         file_obj.current_version_id = version.id
         database.session.commit()
-        
+
         yield file_obj
-        
+
         # Cleanup
         database.session.delete(file_obj)
         database.session.commit()
 
 
 @pytest.fixture
-def sample_file_with_content(app, minio_client, test_bucket_name, test_user_id):
+def sample_file_with_content(
+    app, minio_client, test_bucket_name, test_user_id
+):
     """Create a sample file with actual MinIO content."""
     with app.app_context():
         # Create file in database
         file_obj = StorageFile(
-            bucket_type='users',
+            bucket_type="users",
             bucket_id=test_user_id,
-            logical_path='test/sample_with_content.txt',
-            filename='sample_with_content.txt',
+            logical_path="test/sample_with_content.txt",
+            filename="sample_with_content.txt",
             owner_id=test_user_id,
-            status='approved'
+            status="approved",
         )
         database.session.add(file_obj)
         database.session.flush()
-        
+
         # Create version
-        object_key = f'users/{test_user_id}/test/sample_with_content.txt/1'
-        content = b'Sample file content for testing'
-        
+        object_key = f"users/{test_user_id}/test/sample_with_content.txt/1"
+        content = b"Sample file content for testing"
+
         version = FileVersion(
             file_id=file_obj.id,
             version_number=1,
             object_key=object_key,
             created_by=test_user_id,
-            status='draft',
+            status="draft",
             size=len(content),
-            mime_type='text/plain'
+            mime_type="text/plain",
         )
         database.session.add(version)
         database.session.flush()
-        
+
         file_obj.current_version_id = version.id
         database.session.commit()
-        
+
         # Upload to MinIO (use "storage" bucket which is the default for the service)
         storage_bucket = "storage"
         try:
             if not minio_client.bucket_exists(storage_bucket):
                 minio_client.make_bucket(storage_bucket)
-            
+
             minio_client.put_object(
                 storage_bucket,
                 object_key,
                 BytesIO(content),
                 len(content),
-                content_type='text/plain'
+                content_type="text/plain",
             )
         except S3Error:
             pass
-        
+
         yield file_obj, content
-        
+
         # Cleanup
         try:
             minio_client.remove_object(storage_bucket, object_key)
@@ -322,39 +331,39 @@ def locked_file(app, test_user_id):
     """Create a locked file for testing."""
     with app.app_context():
         file_obj = StorageFile(
-            bucket_type='users',
+            bucket_type="users",
             bucket_id=test_user_id,
-            logical_path='test/locked.txt',
-            filename='locked.txt',
+            logical_path="test/locked.txt",
+            filename="locked.txt",
             owner_id=test_user_id,
-            status='approved'
+            status="approved",
         )
         database.session.add(file_obj)
         database.session.flush()
-        
+
         version = FileVersion(
             file_id=file_obj.id,
             version_number=1,
-            object_key=f'users/{test_user_id}/test/locked.txt/1',
+            object_key=f"users/{test_user_id}/test/locked.txt/1",
             created_by=test_user_id,
-            status='draft'
+            status="draft",
         )
         database.session.add(version)
         database.session.flush()
-        
+
         file_obj.current_version_id = version.id
-        
+
         lock = Lock(
             file_id=file_obj.id,
             locked_by=test_user_id,
-            lock_type='edit',
-            reason='Test lock'
+            lock_type="edit",
+            reason="Test lock",
         )
         database.session.add(lock)
         database.session.commit()
-        
+
         yield file_obj
-        
+
         # Cleanup
         database.session.delete(lock)
         database.session.delete(file_obj)
