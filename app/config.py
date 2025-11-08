@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 # Error messages constants
 DATABASE_URL_ERROR = "DATABASE_URL environment variable is not set."
 MINIO_SERVICE_URL_ERROR = "MINIO_SERVICE_URL environment variable is not set."
+PROJECT_SERVICE_URL_ERROR = "PROJECT_SERVICE_URL environment variable is not set."
 
 # Load .env file ONLY if not running in Docker
 # This hook ensures environment variables are loaded for flask commands
@@ -47,6 +48,11 @@ class Config:
     MINIO_SERVICE_URL = os.environ.get("MINIO_SERVICE_URL")
     if not MINIO_SERVICE_URL:
         raise ValueError(MINIO_SERVICE_URL_ERROR)
+
+    # Project service URL for access control
+    PROJECT_SERVICE_URL = os.environ.get("PROJECT_SERVICE_URL")
+    if not PROJECT_SERVICE_URL:
+        raise ValueError(PROJECT_SERVICE_URL_ERROR)
 
 
 class DevelopmentConfig(Config):

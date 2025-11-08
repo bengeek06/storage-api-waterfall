@@ -276,7 +276,102 @@ pytest
 
 ---
 
-## 🔄 Workflows typiques
+## � Contrôle d'accès et dépendances externes
+
+Le service `storage_service` délègue les vérifications d'accès selon le type de bucket :
+
+### Buckets `users` et `companies`
+Vérification **locale** basée sur le JWT :
+- **users** : `user_id` du token doit correspondre à `bucket_id`
+- **companies** : `company_id` du token doit correspondre à `bucket_id`
+
+### Bucket `projects`
+Vérification **déléguée** au service `project` via API.
+
+---
+
+## 📡 Endpoints requis du service Project
+
+Le service `project` doit exposer les endpoints suivants pour permettre au `storage_service` de vérifier les permissions :
+
+### 1. Vérification d'accès unique
+
+```http
+POST /check-file-access
+Content-Type: application/json
+Cookie: <JWT token>
+
+{
+  "project_id": "uuid",
+  "action": "read|write|delete|lock|validate",
+  "file_id": "uuid"  // optionnel, pour audit logs
+}
+```
+
+**Réponse succès (200)** :
+```json
+{
+  "allowed": true,
+  "role": "owner|admin|member|viewer"  // optionnel
+}
+```
+
+**Réponse refusée (200)** :
+```json
+{
+  "allowed": false,
+  "reason": "insufficient_permissions"  // optionnel
+}
+```
+
+**Actions supportées** :
+- `read` : télécharger, lister fichiers
+- `write` : uploader, copier fichiers
+- `delete` : supprimer définitivement
+- `lock` : verrouiller/déverrouiller
+- `validate` : approuver/rejeter versions
+
+### 2. Vérification d'accès batch (optimisation)
+
+```http
+POST /check-file-access/batch
+Content-Type: application/json
+Cookie: <JWT token>
+
+{
+  "checks": [
+    {"project_id": "uuid1", "action": "read"},
+    {"project_id": "uuid2", "action": "write"},
+    {"project_id": "uuid1", "action": "delete", "file_id": "uuid3"}
+  ]
+}
+```
+
+**Réponse (200)** :
+```json
+{
+  "results": [
+    {"project_id": "uuid1", "action": "read", "allowed": true},
+    {"project_id": "uuid2", "action": "write", "allowed": false},
+    {"project_id": "uuid1", "action": "delete", "allowed": true}
+  ]
+}
+```
+
+### Politique de timeout
+
+- **Timeout** : 2 secondes max
+- **Fail-safe** : Si le service `project` est indisponible → **deny** (403)
+- **Réponse API** : Message explicite `"project_service_unavailable"`
+
+### Cache
+
+Le service `project` **doit implémenter son propre cache** (Redis recommandé) pour les vérifications d'accès.  
+Le `storage_service` ne cache pas ces réponses.
+
+---
+
+## �🔄 Workflows typiques
 
 ### 📁 1. Obtenir une URL pré-signée pour upload
 
@@ -380,6 +475,24 @@ Autres cas possibles :
 - `version_conflict`
 - `bucket_not_found`
 - `minio_unreachable`
+- `project_service_unavailable` (timeout ou service down)
+- `access_denied` (permissions insuffisantes)
+
+---
+
+## 🔗 Variables d'environnement
+
+### Services externes
+
+| Variable | Description | Exemple |
+|----------|-------------|---------|
+| `PROJECT_SERVICE_URL` | URL du service project pour vérification d'accès | `http://project-service:5001` |
+| `MINIO_ENDPOINT` | Endpoint MinIO | `localhost:9000` |
+| `MINIO_ACCESS_KEY` | Clé d'accès MinIO | `minioadmin` |
+| `MINIO_SECRET_KEY` | Clé secrète MinIO | `minioadmin` |
+| `DATABASE_URL` | URL PostgreSQL | `postgresql://user:pass@localhost/storage` |
+
+Voir `env.example` pour la liste complète.
 
 ---
 
