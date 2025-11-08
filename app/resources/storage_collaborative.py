@@ -230,9 +230,9 @@ class FileCopyResource(Resource, BaseStorageResource):
             data = file_copy_request_schema.load(request.get_json())
 
             # Get current user info
-            jwt_data = extract_jwt_data()
-            user_id = jwt_data.get("user_id")
-            company_id = jwt_data.get("company_id")
+            # Get current user info from g (set by @require_jwt_auth decorator)
+            user_id = g.user_id
+            company_id = g.company_id
 
             # Check access to source bucket
             if not self._check_bucket_access(
@@ -502,8 +502,8 @@ class FileLockResource(Resource):
             data = lock_request_schema.load(request.get_json())
 
             # Get current user info
-            jwt_data = extract_jwt_data()
-            user_id = jwt_data.get("user_id")
+            # Get current user info from g (set by @require_jwt_auth decorator)
+            user_id = g.user_id
 
             # Find the file
             file_obj = StorageFile.get_by_file_id(data["file_id"])
@@ -631,8 +631,8 @@ class FileUnlockResource(Resource):
             data = unlock_request_schema.load(request.get_json())
 
             # Get current user info
-            jwt_data = extract_jwt_data()
-            user_id = jwt_data.get("user_id")
+            # Get current user info from g (set by @require_jwt_auth decorator)
+            user_id = g.user_id
 
             # Find the file
             file_obj = StorageFile.get_by_file_id(data["file_id"])
@@ -751,9 +751,9 @@ class FileInfoResource(Resource, BaseStorageResource):
             args = file_info_request_schema.load(request.args)
 
             # Get current user info
-            jwt_data = extract_jwt_data()
-            user_id = jwt_data.get("user_id")
-            company_id = jwt_data.get("company_id")
+            # Get current user info from g (set by @require_jwt_auth decorator)
+            user_id = g.user_id
+            company_id = g.company_id
 
             # Check bucket access
             if not self._check_bucket_access(

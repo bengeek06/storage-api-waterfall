@@ -12,7 +12,7 @@ Resources:
     - VersionListResource: List versions with filtering
 """
 
-from flask import request
+from flask import request, g
 from flask_restful import Resource
 from marshmallow import ValidationError
 
@@ -72,8 +72,8 @@ class VersionCommitResource(Resource):
             data = version_commit_schema.load(request.get_json())
 
             # Get current user info
-            jwt_data = extract_jwt_data()
-            user_id = jwt_data.get("user_id")
+            # Get current user info from g (set by @require_jwt_auth decorator)
+            user_id = g.user_id
 
             # Verify user_id matches created_by (security check)
             if data["created_by"] != user_id:
@@ -199,8 +199,8 @@ class VersionApproveResource(Resource):
             comment = request_data.get("comment")
 
             # Get current user info
-            jwt_data = extract_jwt_data()
-            user_id = jwt_data.get("user_id")
+            # Get current user info from g (set by @require_jwt_auth decorator)
+            user_id = g.user_id
 
             # Find the version
             version = db.session.get(FileVersion, version_id)
@@ -320,8 +320,8 @@ class VersionRejectResource(Resource):
             comment = request_data.get("comment")
 
             # Get current user info
-            jwt_data = extract_jwt_data()
-            user_id = jwt_data.get("user_id")
+            # Get current user info from g (set by @require_jwt_auth decorator)
+            user_id = g.user_id
 
             # Find the version
             version = db.session.get(FileVersion, version_id)
@@ -435,8 +435,8 @@ class VersionListResource(Resource):
             args = version_list_request_schema.load(request.args)
 
             # Get current user info
-            jwt_data = extract_jwt_data()
-            user_id = jwt_data.get("user_id")
+            # Get current user info from g (set by @require_jwt_auth decorator)
+            user_id = g.user_id
 
             # Find the file to check existence
             file_obj = StorageFile.get_by_file_id(args["file_id"])
