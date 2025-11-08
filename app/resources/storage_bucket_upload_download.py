@@ -439,8 +439,8 @@ class BucketDownloadPresignResource(Resource):
                 )
 
             # Get current version object
-            current_version = FileVersion.query.get(
-                file_obj.current_version_id
+            current_version = db.session.get(
+                FileVersion, file_obj.current_version_id
             )
             if not current_version:
                 return (
@@ -599,8 +599,8 @@ class BucketDownloadProxyResource(Resource):
                 )
 
             # Get current version object
-            current_version = FileVersion.query.get(
-                file_obj.current_version_id
+            current_version = db.session.get(
+                FileVersion, file_obj.current_version_id
             )
             if not current_version:
                 return (
