@@ -66,10 +66,16 @@ ENV FLASK_ENV=testing \
     APP_MODE=testing \
     PYTEST_ADDOPTS="-v" \
     DATABASE_URL=sqlite:///:memory: \
-    JWT_SECRET=test-jwt-secret-key
+    JWT_SECRET=test-jwt-secret-key \
+    MINIO_ENDPOINT=localhost:9000 \
+    MINIO_ACCESS_KEY=minioadmin \
+    MINIO_SECRET_KEY=minioadmin \
+    MINIO_USE_SSL=false \
+    PROJECT_SERVICE_URL=http://localhost:5001 \
+    MINIO_BUCKET_PREFIX=test
 
-# Pas d'entrypoint, juste exécuter pytest directement
-CMD ["pytest"]
+# Run unit tests only (no external dependencies)
+CMD ["pytest", "tests/unit/", "-v"]
 
 ###############################
 # Production runtime          #

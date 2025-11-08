@@ -1,38 +1,32 @@
-name: Flask service
+name: Integration Tests
 
 on:
   push:
-    branches: [ main, guardian_staging ]
+    branches: [ main ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual trigger
 
 permissions:
   contents: read
 
 jobs:
-  build:
-
+  integration-tests:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10",  "3.11",  "3.12", "3.13"]
-
+    
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Python ${{ matrix.python-version }}
+    
+    - name: Set up Python 3.13
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ matrix.python-version }}
-    - name: Display Python version
-      run: python -c "import sys; print(sys.version)"
+        python-version: "3.13"
+    
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
-    - name: Lint with pylint
-      run: |
-        pylint --rcfile .pylintrc app/
     
     - name: Setup test environment variables
       run: |
@@ -47,22 +41,25 @@ jobs:
         echo "PROJECT_SERVICE_URL=http://localhost:5001" >> .env.testing
         echo "TESTING=true" >> .env.testing
     
-    - name: Run unit tests only
+    - name: Start MinIO service
       run: |
-        FLASK_ENV=testing pytest tests/unit/ -v --tb=short
+        docker run -d \
+          --name minio \
+          -p 9000:9000 \
+          -e MINIO_ROOT_USER=minioadmin \
+          -e MINIO_ROOT_PASSWORD=minioadmin \
+          minio/minio server /data
+        sleep 5
+        
+        # Wait for MinIO to be ready
+        timeout 30 bash -c 'until curl -sf http://localhost:9000/minio/health/live; do sleep 1; done'
     
-    # Integration tests would require Docker Compose with MinIO
-    # Uncomment below to run integration tests in CI
-    # - name: Start services (MinIO)
-    #   run: |
-    #     docker-compose up -d minio
-    #     sleep 5
-    # 
-    # - name: Run integration tests
-    #   run: |
-    #     FLASK_ENV=testing pytest tests/integration/ -v --tb=short
-    # 
-    # - name: Stop services
-    #   if: always()
-    #   run: |
-    #     docker-compose down
+    - name: Run integration tests
+      run: |
+        FLASK_ENV=testing pytest tests/integration/ -v --tb=short
+    
+    - name: Stop MinIO
+      if: always()
+      run: |
+        docker stop minio
+        docker rm minio
