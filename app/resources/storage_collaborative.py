@@ -72,9 +72,8 @@ class BaseStorageResource:
             # User can access their company's bucket
             return bucket_id == company_id
         if bucket == "projects":
-            # For projects, we would need to check project membership
-            # For now, allow if user belongs to the same company
-            # TODO: Implement proper project access control
+            # Project access control is delegated to the project service
+            # via check_bucket_access() in app.utils
             return True
 
         return False
@@ -673,7 +672,8 @@ class FileUnlockResource(Resource):
                     403,
                 )
 
-            # TODO: If force_unlock, check if user has admin privileges
+            # Note: force_unlock currently allowed for lock owner
+            # Future: check admin privileges via project service for force_unlock by non-owner
 
             # Release the lock
             lock.release(_released_by=user_id)

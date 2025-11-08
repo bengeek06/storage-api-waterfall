@@ -5,7 +5,7 @@ import re
 import uuid
 from functools import wraps
 import jwt
-from flask import request, g
+from flask import request, g, current_app
 import requests
 
 from app.logger import logger
@@ -316,3 +316,331 @@ def check_access(user_id, resource_name, operation):
     except (ValueError, KeyError) as e:
         logger.error(f"Unexpected error checking access: {e}")
         return False, "Internal server error", 500
+
+
+def check_bucket_access(bucket_type, bucket_id, action="read", file_id=None):
+    """
+    Verify user has access to a bucket based on bucket type.
+
+    Args:
+        bucket_type (str): Type of bucket ('users', 'companies', 'projects')
+        bucket_id (str): ID of the bucket (user_id, company_id, or project_id)
+        action (str): Action to perform ('read', 'write', 'delete', 'lock', 'validate')
+        file_id (str, optional): File ID for audit logging
+
+    Returns:
+        tuple: (allowed (bool), error_message (str or None), status_code (int))
+    """
+    user_id = g.user_id
+    company_id = g.company_id
+
+    logger.debug(
+        f"Checking bucket access - type: {bucket_type}, id: {bucket_id}, "
+        f"action: {action}, user: {user_id}, company: {company_id}"
+    )
+
+    # Validate bucket_type
+    if bucket_type not in ["users", "companies", "projects"]:
+        return False, f"Invalid bucket_type: {bucket_type}", 400
+
+    # Users bucket: user can only access their own directory
+    if bucket_type == "users":
+        allowed = bucket_id == user_id
+        if not allowed:
+            logger.warning(
+                f"Access denied: user {user_id} tried to access users/{bucket_id}"
+            )
+            return (
+                False,
+                "Access denied: cannot access other users' files",
+                403,
+            )
+        return True, None, 200
+
+    # Companies bucket: user must belong to the company
+    if bucket_type == "companies":
+        allowed = bucket_id == company_id
+        if not allowed:
+            logger.warning(
+                f"Access denied: user {user_id} (company {company_id}) "
+                f"tried to access companies/{bucket_id}"
+            )
+            return (
+                False,
+                "Access denied: cannot access other companies' files",
+                403,
+            )
+        return True, None, 200
+
+    # Projects bucket: delegate to project service
+    if bucket_type == "projects":
+        return check_project_access(bucket_id, action, file_id)
+
+    return False, "Unknown bucket type", 400
+
+
+def check_project_access(project_id, action="read", file_id=None):
+    """
+    Call project service to verify user has access to a project.
+
+    Args:
+        project_id (str): UUID of the project
+        action (str): Action to perform ('read', 'write', 'delete', 'lock', 'validate')
+        file_id (str, optional): File ID for audit logging
+
+    Returns:
+        tuple: (allowed (bool), error_message (str or None), status_code (int))
+    """
+    project_service_url = current_app.config.get("PROJECT_SERVICE_URL")
+    if not project_service_url:
+        logger.error("PROJECT_SERVICE_URL not configured")
+        return False, "Internal configuration error", 500
+
+    # Prepare request payload
+    payload = {"project_id": project_id, "action": action}
+    if file_id:
+        payload["file_id"] = file_id
+
+    # Get JWT cookie to forward to project service
+    headers = {}
+    jwt_token = request.cookies.get("access_token")
+    if jwt_token:
+        headers["Cookie"] = f"access_token={jwt_token}"
+        logger.debug("Forwarding JWT cookie to project service")
+    else:
+        logger.warning(
+            "No JWT token found in cookies for project access check"
+        )
+
+    try:
+        logger.debug(
+            f"Calling project service: {project_service_url}/check-file-access "
+            f"for project {project_id}, action {action}"
+        )
+
+        response = requests.post(
+            f"{project_service_url}/check-file-access",
+            json=payload,
+            headers=headers,
+            timeout=2.0,  # 2 second timeout as specified
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            allowed = data.get("allowed", False)
+
+            if allowed:
+                role = data.get("role", "unknown")
+                logger.info(
+                    f"Project access granted: user {g.user_id}, "
+                    f"project {project_id}, action {action}, role {role}"
+                )
+                return True, None, 200
+
+            reason = data.get("reason", "insufficient_permissions")
+            logger.warning(
+                f"Project access denied: user {g.user_id}, "
+                f"project {project_id}, action {action}, reason: {reason}"
+            )
+            return False, f"Access denied: {reason}", 403
+
+        logger.error(
+            f"Project service returned {response.status_code}: {response.text}"
+        )
+        return (
+            False,
+            f"Project service error (status {response.status_code})",
+            502,
+        )
+
+    except requests.exceptions.Timeout:
+        logger.error(
+            f"Timeout calling project service for project {project_id}"
+        )
+        return False, "Project service unavailable (timeout)", 504
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error calling project service: {e}")
+        return False, "Project service unavailable", 502
+
+    except (ValueError, KeyError) as e:
+        logger.error(f"Error parsing project service response: {e}")
+        return False, "Invalid response from project service", 502
+
+
+def check_project_access_batch(checks):
+    """
+    Call project service to verify access for multiple projects at once.
+
+    Args:
+        checks (list): List of dicts with keys: project_id, action, file_id (optional)
+                      Example: [{"project_id": "uuid", "action": "read", "file_id": "uuid"}]
+
+    Returns:
+        tuple: (results (list), error_message (str or None), status_code (int))
+               results format: [{"project_id": "uuid", "action": "read", "allowed": true}]
+    """
+    project_service_url = current_app.config.get("PROJECT_SERVICE_URL")
+    if not project_service_url:
+        logger.error("PROJECT_SERVICE_URL not configured")
+        return None, "Internal configuration error", 500
+
+    # Get JWT cookie
+    headers = {}
+    jwt_token = request.cookies.get("access_token")
+    if jwt_token:
+        headers["Cookie"] = f"access_token={jwt_token}"
+
+    try:
+        logger.debug(
+            f"Calling project service batch endpoint for {len(checks)} checks"
+        )
+
+        response = requests.post(
+            f"{project_service_url}/check-file-access/batch",
+            json={"checks": checks},
+            headers=headers,
+            timeout=2.0,
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            results = data.get("results", [])
+            logger.debug(
+                f"Batch access check completed: {len(results)} results"
+            )
+            return results, None, 200
+
+        logger.error(
+            f"Project service batch returned {response.status_code}: {response.text}"
+        )
+        return (
+            None,
+            f"Project service error (status {response.status_code})",
+            502,
+        )
+
+    except requests.exceptions.Timeout:
+        logger.error("Timeout calling project service batch endpoint")
+        return None, "Project service unavailable (timeout)", 504
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error calling project service batch: {e}")
+        return None, "Project service unavailable", 502
+
+    except (ValueError, KeyError) as e:
+        logger.error(f"Error parsing project service batch response: {e}")
+        return None, "Invalid response from project service", 502
+
+
+def log_access_denied(bucket_type, bucket_id, action, reason, file_id=None):
+    """
+    Log an access denial event to audit trail.
+
+    Args:
+        bucket_type (str): Type of bucket
+        bucket_id (str): ID of the bucket
+        action (str): Action that was denied
+        reason (str): Reason for denial
+        file_id (str, optional): File ID if applicable
+    """
+    # pylint: disable=import-outside-toplevel
+    # Imports inside function to avoid circular dependency
+    from app.models.storage import AuditLog
+    from app.models.db import db
+
+    try:
+        user_id = getattr(g, "user_id", "unknown")
+        ip_address = request.remote_addr if request else None
+        user_agent = request.headers.get("User-Agent") if request else None
+
+        details = {
+            "bucket_type": bucket_type,
+            "bucket_id": bucket_id,
+            "action": action,
+            "reason": reason,
+            "access_denied": True,
+        }
+
+        audit_log = AuditLog(
+            file_id=file_id,  # Can be None
+            action="access_denied",
+            user_id=user_id,
+            details=details,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        db.session.add(audit_log)
+        db.session.commit()
+
+        logger.info(
+            f"Access denied logged: user={user_id}, bucket={bucket_type}/{bucket_id}, "
+            f"action={action}, reason={reason}"
+        )
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        # Catch all exceptions to prevent audit logging from breaking the request
+        logger.error(f"Failed to log access denial: {e}")
+        # Don't fail the request if audit logging fails
+        db.session.rollback()
+
+
+def require_bucket_access(action):
+    """
+    Decorator to verify bucket access based on request data.
+
+    Expects request JSON to contain bucket_type and bucket_id (or project_id for projects).
+    Optionally includes file_id for audit logging.
+
+    Args:
+        action (str): Action to verify ('read', 'write', 'delete', 'lock', 'validate')
+
+    Usage:
+        @require_bucket_access('write')
+        def post(self):
+            # bucket_type and bucket_id already verified
+            ...
+    """
+
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapped(*args, **kwargs):
+            # Get request data (should be set by @require_jwt_auth)
+            data = getattr(g, "json_data", None)
+            if not data:
+                try:
+                    data = request.get_json()
+                except Exception:  # pylint: disable=broad-exception-caught
+                    # Catch all JSON parsing errors (ValueError, TypeError, etc.)
+                    return {"error": "Invalid JSON data"}, 400
+
+            # Extract bucket info
+            bucket_type = data.get("bucket_type")
+            bucket_id = data.get("bucket_id") or data.get("project_id")
+            file_id = data.get("file_id")
+
+            if not bucket_type:
+                return {"error": "Missing bucket_type in request"}, 400
+            if not bucket_id:
+                return {"error": "Missing bucket_id in request"}, 400
+
+            # Check access
+            allowed, error_msg, status_code = check_bucket_access(
+                bucket_type, bucket_id, action, file_id
+            )
+
+            if not allowed:
+                # Log the denial
+                log_access_denied(
+                    bucket_type, bucket_id, action, error_msg, file_id
+                )
+                return {"error": error_msg}, status_code
+
+            # Store bucket info in g for use in view
+            g.bucket_type = bucket_type
+            g.bucket_id = bucket_id
+
+            return view_func(*args, **kwargs)
+
+        return wrapped
+
+    return decorator

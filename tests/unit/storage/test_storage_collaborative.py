@@ -70,11 +70,9 @@ class TestStorageCollaborative(unittest.TestCase):
         token = create_jwt_token(self.company_id, self.user_id)
         self.client.set_cookie("access_token", token, domain="localhost")
 
-    @patch("app.resources.storage_collaborative.extract_jwt_data")
-    def test_bucket_list_success(self, mock_jwt):
+    def test_bucket_list_success(self):
         """Test successful bucket file listing."""
         self.authenticate_user()
-        mock_jwt.return_value = self.jwt_data  # Return full JWT data dict
 
         # Create test file
         file_obj = StorageFile(
@@ -126,12 +124,10 @@ class TestStorageCollaborative(unittest.TestCase):
         response_data = json.loads(response.data)
         self.assertEqual(response_data["error"], "ACCESS_DENIED")
 
-    @patch("app.resources.storage_collaborative.extract_jwt_data")
     @patch("app.resources.storage_collaborative.storage_backend")
-    def test_file_copy_success(self, mock_storage, mock_jwt):
+    def test_file_copy_success(self, mock_storage):
         """Test successful file copying."""
         self.authenticate_user()
-        mock_jwt.return_value = self.jwt_data  # Return full JWT data dict
 
         # Create source file
         source_file = StorageFile(
@@ -178,11 +174,9 @@ class TestStorageCollaborative(unittest.TestCase):
         self.assertIn("data", data)
         self.assertIn("file_id", data["data"])
 
-    @patch("app.resources.storage_collaborative.extract_jwt_data")
-    def test_file_lock_success(self, mock_jwt):
+    def test_file_lock_success(self):
         """Test successful file locking."""
         self.authenticate_user()
-        mock_jwt.return_value = self.jwt_data  # Return full JWT data dict
 
         # Create test file
         file_obj = StorageFile(
@@ -209,11 +203,9 @@ class TestStorageCollaborative(unittest.TestCase):
         data = json.loads(response.data)
         self.assertTrue(data["success"])
 
-    @patch("app.resources.storage_collaborative.extract_jwt_data")
-    def test_file_unlock_success(self, mock_jwt):
+    def test_file_unlock_success(self):
         """Test successful file unlocking."""
         self.authenticate_user()
-        mock_jwt.return_value = self.jwt_data  # Return full JWT data dict
 
         # Create test file
         file_obj = StorageFile(
@@ -247,11 +239,9 @@ class TestStorageCollaborative(unittest.TestCase):
         data = json.loads(response.data)
         self.assertTrue(data["success"])
 
-    @patch("app.resources.storage_collaborative.extract_jwt_data")
-    def test_file_info_success(self, mock_jwt):
+    def test_file_info_success(self):
         """Test successful file information retrieval."""
         self.authenticate_user()
-        mock_jwt.return_value = self.jwt_data  # Return full JWT data dict
 
         # Create test file
         file_obj = StorageFile(

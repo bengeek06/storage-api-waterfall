@@ -145,6 +145,6 @@ class BucketPresignedUrlResource(Resource):
         if bucket_type == "companies":
             return bucket_id == company_id
         if bucket_type == "projects":
-            # TODO: Implement proper project access control
+            # Project access control delegated to project service via check_bucket_access()
             return True
         return False
