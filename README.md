@@ -7,20 +7,19 @@
 ![Coverage](https://img.shields.io/badge/coverage-pytest-yellow.svg)
 ![Docker](https://img.shields.io/badge/docker-ready-blue.svg)
 
-A minimalist, production-ready template to quickly build a RESTful API using Flask.  
-This repository provides a solid foundation for your next API project, with environment-based configuration, Docker support, migrations, and a full OpenAPI 3.0 specification.
+Le service **`storage_service`** fournit une API REST sécurisée pour la **gestion documentaire** de l’application.  
+Il permet de stocker, versionner et verrouiller des fichiers liés à des utilisateurs, des entreprises et des projets, tout en assurant un suivi via des **métadonnées stockées dans PostgreSQL** et des fichiers hébergés dans **MinIO**.
+
 
 ---
 
 ## Features
 
-- **Environment-based configuration**: Easily switch between development, testing, staging, and production using the `FLASK_ENV` environment variable.
-- **RESTful API**: CRUD endpoints for a sample resource (`Dummy`), plus endpoints for version, configuration, import/export.
-- **OpenAPI 3.0 documentation**: See [`openapi.yml`](openapi.yml).
-- **Docker-ready**: Includes a `Dockerfile` and healthcheck script.
-- **Database migrations**: Managed with Alembic/Flask-Migrate.
-- **Testing**: Pytest-based test suite.
-- **Logging**: Colored logging for better readability.
+- Centraliser le stockage de tous les fichiers utilisateurs et projets.  
+- Gérer les **versions**, **locks** et **métadonnées**.  
+- Permettre un **workflow de validation** (soumission → relecture → approbation).  
+- Fournir une **API simple** utilisable directement depuis le frontend.  
+- Déléguer les permissions aux services **RBAC** (endpoint access) et **Projects** (contexte projet).
 
 ---
 
@@ -50,27 +49,99 @@ You can use `env.example` as a template for your environment files.
 
 ---
 
-## API Endpoints
 
-The main endpoints are:
-
-| Method | Path             | Description                         |
-|--------|------------------|-------------------------------------|
-| GET    | /version         | Get API version                     |
-| GET    | /config          | Get current app configuration       |
-| GET    | /dummies         | List all dummy items                |
-| POST   | /dummies         | Create a new dummy item             |
-| GET    | /dummies/{id}    | Get a dummy item by ID              |
-| PUT    | /dummies/{id}    | Replace a dummy item by ID          |
-| PATCH  | /dummies/{id}    | Partially update a dummy by ID      |
-| DELETE | /dummies/{id}    | Delete a dummy item by ID           |
-| GET    | /export/csv      | Export all dummies as CSV           |
-| POST   | /import/csv      | Import dummies from a CSV file      |
-| POST   | /import/json     | Import dummies from a JSON file     |
-
-See [`openapi.yml`](openapi.yml) for full documentation and schema details.
 
 ---
+
+## 🧩 Architecture
+
+```
+┌────────────────────────────────────────────┐
+│                Frontend                    │
+│  (Appels API avec cookie JWT sécurisé)     │
+└────────────────────────────────────────────┘
+                  │
+                  ▼
+┌────────────────────────────────────────────┐
+│            storage_service (Python)        │
+│ - API REST /storage                        │
+│ - Gestion métadonnées (PostgreSQL)         │
+│ - Accès fichiers (MinIO)                   │
+│ - Versioning / Locks / Validation           │
+│ - Vérification JWT et RBAC                 │
+└────────────────────────────────────────────┘
+                  │
+                  ▼
+┌────────────────────┐    ┌─────────────────────┐
+│     MinIO (S3)     │    │  PostgreSQL Metadata │
+│  users_files/       │    │  → files, versions   │
+│  company_files/     │    │  → locks, status     │
+│  project_files/     │    │  → audit logs        │
+└────────────────────┘    └─────────────────────┘
+```
+
+## 🪣 Buckets et Arborescence
+
+Trois buckets principaux existent :
+
+| Bucket | Usage | Exemple de chemin |
+|--------|--------|------------------|
+| `users` | fichiers personnels | `/users/<user_id>/notes/todo.txt` |
+| `companies` | documents d'entreprise | `/companies/<company_id>/policies/hr.pdf` |
+| `projects` | fichiers liés à un projet | `/projects/<project_id>/designs/cad/part.sldprt` |
+
+Chaque fichier est identifié par un **chemin logique** et possède des **métadonnées** versionnées.
+
+---
+
+## 🧱 Métadonnées stockées
+
+Exemple de structure :
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `id` | UUID | identifiant du fichier |
+| `bucket` | enum(users/companies/projects) | bucket concerné |
+| `path` | text | chemin logique du fichier |
+| `version` | int | version courante |
+| `owner_id` | UUID | utilisateur créateur |
+| `locked_by` | UUID nullable | utilisateur ayant locké |
+| `status` | enum(draft, pending_validation, validated, archived) | état du fichier |
+| `tags` | jsonb | données additionnelles |
+| `created_at` | timestamp | date création |
+| `updated_at` | timestamp | dernière modification |
+
+## API Endpoints
+
+| Fonction | Endpoint | Description |
+|-----------|-----------|-------------|
+| **Système** | | |
+| Santé du service | `GET /health` | Vérifie l'état du service |
+| Version | `GET /version` | Retourne la version de l'API |
+| Configuration | `GET /config` | Configuration publique |
+| **Fichiers** | | |
+| Lister les fichiers | `GET /list` | Parcourt un répertoire |
+| Métadonnées | `GET /metadata` | Informations complètes du fichier |
+| **Upload** | | |
+| URL pré-signée upload | `POST /upload/presign` | Génère une URL pour upload direct |
+| Upload via proxy | `POST /upload/proxy` | Upload via le service (multipart) |
+| **Download** | | |
+| URL pré-signée download | `POST /download/presign` | Génère une URL pour download direct |
+| Download via proxy | `GET /download/proxy` | Download via le service |
+| **Collaboration** | | |
+| Copier un fichier | `POST /copy` | Copie vers workspace utilisateur |
+| Verrouiller | `POST /lock` | Verrouille un fichier |
+| Déverrouiller | `POST /unlock` | Libère un verrou |
+| Lister les verrous | `GET /locks` | Liste des fichiers verrouillés |
+| **Versioning** | | |
+| Lister les versions | `GET /versions` | Historique des versions |
+| Créer nouvelle version | `POST /versions/commit` | Soumet une nouvelle version |
+| Approuver version | `POST /versions/{version_id}/approve` | Valide une version |
+| Rejeter version | `POST /versions/{version_id}/reject` | Rejette une version |
+| **Administration** | | |
+| Supprimer fichier | `DELETE /delete` | Supprime définitivement |
+
+See [`openapi.yml`](openapi.yml) for full documentation and schema details.
 
 ## Project Structure
 
@@ -147,12 +218,171 @@ docker run --env-file .env.development -p 5000:5000 flask-api-template
 
 ### Testing
 
+### Testing
+
+#### Tests unitaires (rapides)
+```bash
+# Avec pytest directement
+pytest tests/unit/ -v
+
+# Ou avec le Makefile
+make test-unit
+```
+
+#### Tests d'intégration (avec services Docker)
+```bash
+# Méthode recommandée avec le script automatique
+./scripts/run_integration_tests.sh
+
+# Ou avec le Makefile
+make test-integration-script
+
+# Ou étape par étape
+make test-integration-setup  # Démarre Docker
+make test-integration        # Lance les tests
+make test-integration-teardown  # Nettoie
+```
+
+#### Tests complets
+```bash
+# Tous les tests (unitaires + intégration)
+make test-all
+
+# Tests avec couverture
+make test-unit-coverage
+```
+
+#### Développement
+```bash
+# Démarrer l'environnement de développement complet
+./scripts/start_dev.sh
+# ou
+make dev
+
+# Tests en continu (watch mode)
+make test-watch
+```
+
+### Scripts utiles
+
+- `scripts/run_integration_tests.sh` : Lance les tests d'intégration complets
+- `scripts/start_dev.sh` : Démarre l'environnement de développement
+- `Makefile` : Commandes make pour toutes les tâches courantes
+
 Run all tests with:
 ```
 pytest
 ```
 
 ---
+
+## 🔄 Workflows typiques
+
+### 📁 1. Obtenir une URL pré-signée pour upload
+
+```http
+POST /upload/presign
+Content-Type: application/json
+
+{
+  "bucket": "projects",
+  "path": "/projects/5678/docs/specifications_v1.pdf",
+  "content_type": "application/pdf"
+}
+```
+
+### 📁 2. Upload direct via proxy
+
+```http
+POST /upload/proxy
+Content-Type: multipart/form-data
+
+bucket=projects
+path=/projects/5678/docs/specifications_v1.pdf
+file=@specifications_v1.pdf
+```
+
+### 🔒 3. Copier un fichier projet vers le répertoire personnel (lock automatique)
+
+```http
+POST /copy
+Content-Type: application/json
+
+{
+  "source_bucket": "projects",
+  "source_path": "/projects/5678/docs/specifications_v1.pdf",
+  "target_bucket": "users",
+  "target_path": "/users/1234/work/specifications_v1.pdf"
+}
+```
+
+### ✏️ 4. Modifier le fichier localement et créer une nouvelle version
+
+```http
+POST /versions/commit
+Content-Type: application/json
+
+{
+  "source_bucket": "users",
+  "source_path": "/users/1234/work/specifications_v1.pdf",
+  "target_bucket": "projects", 
+  "target_path": "/projects/5678/docs/specifications_v1.pdf",
+  "message": "Updated specifications with new requirements"
+}
+```
+
+### ✅ 5. Approuver une version
+
+```http
+POST /versions/{version_id}/approve
+Content-Type: application/json
+
+{
+  "comment": "Changes approved by team lead"
+}
+```
+
+### 🗝️ 6. Forcer un unlock
+
+```http
+POST /unlock
+Content-Type: application/json
+
+{
+  "bucket": "projects",
+  "path": "/projects/5678/docs/specifications_v1.pdf",
+  "force": true
+}
+```
+
+### 🕵️ 7. Lister les fichiers verrouillés
+
+```http
+GET /locks?bucket=projects&path=/projects/5678/
+```
+
+---
+## 🧾 Politique d'erreur
+
+Toutes les erreurs suivent ce format :
+
+```json
+{
+  "status": "error",
+  "message": "project service unreachable"
+}
+```
+
+Autres cas possibles :
+- `missing_jwt_token`
+- `unauthorized`
+- `file_locked`
+- `version_conflict`
+- `bucket_not_found`
+- `minio_unreachable`
+
+---
+
 
 ## License
 

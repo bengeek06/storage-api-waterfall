@@ -42,7 +42,7 @@ class Config:
 
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    
+
     # MinIO/S3 Storage configuration
     MINIO_SERVICE_URL = os.environ.get("MINIO_SERVICE_URL")
     if not MINIO_SERVICE_URL:

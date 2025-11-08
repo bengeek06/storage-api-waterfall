@@ -28,10 +28,10 @@ def docker_services():
 def minio_client():
     """Create a real MinIO client for integration testing."""
     return Minio(
-        'localhost:9000',
-        access_key='minioadmin',
-        secret_key='minioadmin123',
-        secure=False
+        "localhost:9000",
+        access_key="minioadmin",
+        secret_key="minioadmin",
+        secure=False,
     )
 
 
@@ -44,10 +44,11 @@ def storage_api_base_url():
 @pytest.fixture
 def auth_headers():
     """Authentication headers for integration test API requests."""
-    # In real scenario, would get actual JWT token from auth service
+    # Use headers fallback for testing (simpler than JWT)
     return {
-        'Authorization': 'Bearer integration_test_token',
-        'Content-Type': 'application/json'
+        "X-User-ID": "12345678-1234-5678-9abc-123456789012",
+        "X-Company-ID": "87654321-4321-8765-cba9-876543210987",
+        "Content-Type": "application/json",
     }
 
 
@@ -66,22 +67,22 @@ def setup_test_environment(minio_client, test_bucket_name):
     try:
         if not minio_client.bucket_exists(test_bucket_name):
             minio_client.make_bucket(test_bucket_name)
-        
+
         # Clean up any existing test objects
         objects = minio_client.list_objects(test_bucket_name, recursive=True)
         for obj in objects:
-            if obj.object_name.startswith('integration_test_'):
+            if obj.object_name.startswith("integration_test_"):
                 minio_client.remove_object(test_bucket_name, obj.object_name)
     except S3Error:
         pass  # Bucket might not exist yet
-    
+
     yield
-    
+
     # Cleanup: Remove test objects created during the test
     try:
         objects = minio_client.list_objects(test_bucket_name, recursive=True)
         for obj in objects:
-            if obj.object_name.startswith('integration_test_'):
+            if obj.object_name.startswith("integration_test_"):
                 minio_client.remove_object(test_bucket_name, obj.object_name)
     except S3Error:
         pass
@@ -96,12 +97,15 @@ def wait_for_service(url, max_attempts=30, delay=2):
             response = requests.get(f"{url}/health", timeout=5)
             if response.status_code == 200:
                 return True
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+        ):
             pass
-        
+
         if attempt < max_attempts - 1:
             time.sleep(delay)
-    
+
     return False
 
 
@@ -116,10 +120,10 @@ def wait_for_minio(minio_client, max_attempts=30, delay=2):
             return True
         except Exception:
             pass
-        
+
         if attempt < max_attempts - 1:
             time.sleep(delay)
-    
+
     return False
 
 
@@ -130,10 +134,12 @@ def ensure_services_ready(minio_client, storage_api_base_url):
     """
     print("Waiting for MinIO to be ready...")
     assert wait_for_minio(minio_client), "MinIO service not ready"
-    
+
     print("Waiting for Storage API to be ready...")
-    assert wait_for_service(storage_api_base_url), "Storage API service not ready"
-    
+    assert wait_for_service(
+        storage_api_base_url
+    ), "Storage API service not ready"
+
     print("All services are ready for integration testing")
 
 
@@ -141,16 +147,16 @@ def ensure_services_ready(minio_client, storage_api_base_url):
 def upload_test_file(minio_client, bucket_name, object_name, content):
     """Helper to upload a test file directly to MinIO."""
     from io import BytesIO
-    
+
     if isinstance(content, str):
         content = content.encode()
-    
+
     minio_client.put_object(
         bucket_name,
         object_name,
         BytesIO(content),
         len(content),
-        content_type="text/plain"
+        content_type="text/plain",
     )
 
 
@@ -172,10 +178,14 @@ def assert_file_not_exists_in_minio(minio_client, bucket_name, object_name):
         return True  # File doesn't exist, which is expected
 
 
-def cleanup_test_objects(minio_client, bucket_name, prefix="integration_test_"):
+def cleanup_test_objects(
+    minio_client, bucket_name, prefix="integration_test_"
+):
     """Helper to cleanup test objects from MinIO."""
     try:
-        objects = minio_client.list_objects(bucket_name, prefix=prefix, recursive=True)
+        objects = minio_client.list_objects(
+            bucket_name, prefix=prefix, recursive=True
+        )
         for obj in objects:
             minio_client.remove_object(bucket_name, obj.object_name)
     except S3Error:
@@ -186,14 +196,12 @@ def cleanup_test_objects(minio_client, bucket_name, prefix="integration_test_"):
 def pytest_configure(config):
     """Configure pytest markers for integration tests."""
     config.addinivalue_line(
-        "markers", 
-        "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+        "markers",
+        "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     )
     config.addinivalue_line(
-        "markers",
-        "integration: marks tests as integration tests"
+        "markers", "integration: marks tests as integration tests"
     )
     config.addinivalue_line(
-        "markers",
-        "performance: marks tests as performance tests"
+        "markers", "performance: marks tests as performance tests"
     )

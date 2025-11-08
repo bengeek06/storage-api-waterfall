@@ -60,6 +60,16 @@ test-watch:
 	@echo "👀 Watching for changes and running unit tests..."
 	$(PYTEST) tests/unit/ --looponfail
 
+.PHONY: dev
+dev:
+	@echo "🚀 Starting development environment..."
+	@./scripts/start_dev.sh
+
+.PHONY: test-integration-script
+test-integration-script:
+	@echo "🔗 Running integration tests with script..."
+	@./scripts/run_integration_tests.sh
+
 # Tests spécifiques par composant
 .PHONY: test-models
 test-models:
@@ -150,5 +160,7 @@ help:
 	@echo ""
 	@echo "Development:"
 	@echo "  make test-watch         - Watch and run unit tests"
+	@echo "  make dev                - Start development environment"
+	@echo "  make test-integration-script - Run integration tests with script"
 	@echo "  make clean-test         - Clean test artifacts"
 	@echo "  make lint-tests         - Lint test files"
