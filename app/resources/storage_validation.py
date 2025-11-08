@@ -12,7 +12,6 @@ Resources:
     - VersionListResource: List versions with filtering
 """
 
-from datetime import datetime, timezone
 from flask import request
 from flask_restful import Resource
 from marshmallow import ValidationError
@@ -159,7 +158,7 @@ class VersionCommitResource(Resource):
                 400,
             )
 
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError, LookupError) as e:
             logger.error(f"Error committing version: {str(e)}", exc_info=True)
             return (
                 error_schema.dump(
@@ -280,7 +279,7 @@ class VersionApproveResource(Resource):
                 400,
             )
 
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError, LookupError) as e:
             logger.error(f"Error approving version: {str(e)}", exc_info=True)
             return (
                 error_schema.dump(
@@ -398,7 +397,7 @@ class VersionRejectResource(Resource):
                 400,
             )
 
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError, LookupError) as e:
             logger.error(f"Error rejecting version: {str(e)}", exc_info=True)
             return (
                 error_schema.dump(
@@ -508,7 +507,7 @@ class VersionListResource(Resource):
                 400,
             )
 
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError, LookupError) as e:
             logger.error(f"Error listing versions: {str(e)}", exc_info=True)
             return (
                 error_schema.dump(

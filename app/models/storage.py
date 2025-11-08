@@ -163,7 +163,7 @@ class StorageFile(db.Model):
             cls.bucket_type == bucket_type,
             cls.bucket_id == bucket_id,
             cls.logical_path.like(f"{path}%"),
-            cls.is_deleted == False,
+            cls.is_deleted.is_(False),
         )
 
         total_count = query.count()
@@ -638,7 +638,7 @@ class Lock(db.Model):
         now = datetime.now(timezone.utc)
         return cls.query.filter(
             cls.file_id == file_id,
-            cls.is_active == True,
+            cls.is_active.is_(True),
             db.or_(cls.expires_at.is_(None), cls.expires_at > now),
         ).first()
 
@@ -658,7 +658,7 @@ class Lock(db.Model):
         if active_only:
             now = datetime.now(timezone.utc)
             query = query.filter(
-                cls.is_active == True,
+                cls.is_active.is_(True),
                 db.or_(cls.expires_at.is_(None), cls.expires_at > now),
             )
         return query.all()

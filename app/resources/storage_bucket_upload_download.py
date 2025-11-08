@@ -122,7 +122,7 @@ class BucketPresignedUrlResource(Resource):
                 400,
             )
 
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError, LookupError) as e:
             logger.error(
                 f"Error generating presigned URL: {str(e)}", exc_info=True
             )
@@ -142,9 +142,10 @@ class BucketPresignedUrlResource(Resource):
         """Check if user has write access to bucket."""
         if bucket_type == "users":
             return bucket_id == user_id
-        elif bucket_type == "companies":
+
+        if bucket_type == "companies":
             return bucket_id == company_id
-        elif bucket_type == "projects":
+        if bucket_type == "projects":
             # TODO: Implement proper project access control
             return True
         return False

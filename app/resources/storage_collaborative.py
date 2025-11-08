@@ -33,7 +33,7 @@ from app.schemas.storage_schema import (
     SuccessResponseSchema,
 )
 from app.logger import logger
-from app.utils import require_jwt_auth, extract_jwt_data, check_access_required
+from app.utils import require_jwt_auth, extract_jwt_data
 from app.services.storage_service import storage_backend
 
 # Initialize schemas
@@ -709,7 +709,7 @@ class FileUnlockResource(Resource):
                 400,
             )
 
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError, LookupError) as e:
             logger.error(f"Error unlocking file: {str(e)}", exc_info=True)
             return (
                 error_schema.dump(
@@ -851,7 +851,7 @@ class FileInfoResource(Resource, BaseStorageResource):
                 400,
             )
 
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError, LookupError) as e:
             logger.error(f"Error getting file info: {str(e)}", exc_info=True)
             return (
                 error_schema.dump(
