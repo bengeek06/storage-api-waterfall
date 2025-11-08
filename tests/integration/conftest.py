@@ -6,22 +6,35 @@ Fixtures and configuration specific to integration tests with real services.
 """
 
 import pytest
-import requests
 import time
 import os
 from minio import Minio
 from minio.error import S3Error
 
+from app import create_app
+from app.config import TestingConfig
+from app.models.db import db
+
 
 @pytest.fixture(scope="session")
-def docker_services():
-    """
-    Fixture to ensure Docker services are running.
-    This would typically use pytest-docker or similar.
-    """
-    # In a real setup, this would start docker-compose services
-    # For now, assume services are already running
-    yield
+def app():
+    """Create Flask app for testing."""
+    app = create_app(TestingConfig)
+    return app
+
+
+@pytest.fixture
+def client(app):
+    """Create Flask test client with database setup."""
+    with app.app_context():
+        # Create all tables
+        db.create_all()
+        
+        yield app.test_client()
+        
+        # Cleanup after test
+        db.session.remove()
+        db.drop_all()
 
 
 @pytest.fixture(scope="session")
@@ -33,23 +46,6 @@ def minio_client():
         secret_key="minioadmin",
         secure=False,
     )
-
-
-@pytest.fixture(scope="session")
-def storage_api_base_url():
-    """Base URL for storage service API in integration tests."""
-    return "http://localhost:5000"
-
-
-@pytest.fixture
-def auth_headers():
-    """Authentication headers for integration test API requests."""
-    # Use headers fallback for testing (simpler than JWT)
-    return {
-        "X-User-ID": "12345678-1234-5678-9abc-123456789012",
-        "X-Company-ID": "87654321-4321-8765-cba9-876543210987",
-        "Content-Type": "application/json",
-    }
 
 
 @pytest.fixture
@@ -88,27 +84,6 @@ def setup_test_environment(minio_client, test_bucket_name):
         pass
 
 
-def wait_for_service(url, max_attempts=30, delay=2):
-    """
-    Wait for a service to be ready by checking its health endpoint.
-    """
-    for attempt in range(max_attempts):
-        try:
-            response = requests.get(f"{url}/health", timeout=5)
-            if response.status_code == 200:
-                return True
-        except (
-            requests.exceptions.ConnectionError,
-            requests.exceptions.Timeout,
-        ):
-            pass
-
-        if attempt < max_attempts - 1:
-            time.sleep(delay)
-
-    return False
-
-
 def wait_for_minio(minio_client, max_attempts=30, delay=2):
     """
     Wait for MinIO to be ready.
@@ -128,17 +103,12 @@ def wait_for_minio(minio_client, max_attempts=30, delay=2):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def ensure_services_ready(minio_client, storage_api_base_url):
+def ensure_services_ready(minio_client):
     """
     Ensure all required services are ready before running integration tests.
     """
     print("Waiting for MinIO to be ready...")
     assert wait_for_minio(minio_client), "MinIO service not ready"
-
-    print("Waiting for Storage API to be ready...")
-    assert wait_for_service(
-        storage_api_base_url
-    ), "Storage API service not ready"
 
     print("All services are ready for integration testing")
 

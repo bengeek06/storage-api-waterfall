@@ -38,15 +38,6 @@ services:
       echo 'MinIO initialized successfully'
       "
 
-  # Redis for caching (optional, if needed for testing)
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-
   # PostgreSQL for integration testing (alternative to SQLite)
   postgres:
     image: postgres:15-alpine
@@ -95,7 +86,6 @@ services:
 
 volumes:
   minio_data:
-  redis_data:
   postgres_data:
 
 networks:

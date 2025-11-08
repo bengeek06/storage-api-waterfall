@@ -10,7 +10,7 @@ Resources:
 """
 
 from datetime import datetime, timezone, timedelta
-from flask import request
+from flask import request, g
 from flask_restful import Resource
 from marshmallow import ValidationError
 
@@ -59,10 +59,9 @@ class BucketPresignedUrlResource(Resource):
             # Validate request
             data = presigned_request_schema.load(request.get_json())
 
-            # Get current user info
-            jwt_data = extract_jwt_data()
-            user_id = jwt_data.get("user_id")
-            company_id = jwt_data.get("company_id")
+            # Get current user info from g (set by @require_jwt_auth decorator)
+            user_id = g.user_id
+            company_id = g.company_id
 
             # Check bucket access
             if not self._check_bucket_access(

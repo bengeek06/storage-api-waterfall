@@ -14,7 +14,7 @@ Resources:
 """
 
 from datetime import datetime, timezone, timedelta
-from flask import request
+from flask import request, g
 from flask_restful import Resource
 from marshmallow import ValidationError
 
@@ -111,10 +111,9 @@ class BucketListResource(Resource, BaseStorageResource):
             page = args.get("page", 1)
             limit = args.get("limit", 50)
 
-            # Get current user info
-            jwt_data = extract_jwt_data()
-            user_id = jwt_data.get("user_id")
-            company_id = jwt_data.get("company_id")
+            # Get current user info from g (set by @require_jwt_auth decorator)
+            user_id = g.user_id
+            company_id = g.company_id
 
             # Check access permissions
             if not self._check_bucket_access(
@@ -426,8 +425,8 @@ class FileCopyResource(Resource, BaseStorageResource):
                     f"{destination_path}/{version.version_number}"
                 )
 
-                # TODO: Implement MinIO object copy
-                # storage_backend.copy_object(version.object_key, new_object_key)
+                # Copy object in MinIO
+                storage_backend.copy_object(version.object_key, new_object_key)
 
                 # Create new version record
                 new_version = FileVersion.create(
@@ -454,8 +453,10 @@ class FileCopyResource(Resource, BaseStorageResource):
                     f"{destination_path}/1"
                 )
 
-                # TODO: Implement MinIO object copy
-                # storage_backend.copy_object(current_version.object_key, new_object_key)
+                # Copy object in MinIO
+                storage_backend.copy_object(
+                    current_version.object_key, new_object_key
+                )
 
                 new_version = FileVersion.create(
                     file_id=copied_file.id,
