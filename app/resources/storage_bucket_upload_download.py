@@ -14,6 +14,7 @@ Resources:
 
 from datetime import datetime, timezone, timedelta
 from flask import request, g, Response, stream_with_context
+from flask.views import MethodView
 from flask_restful import Resource
 from marshmallow import ValidationError
 from werkzeug.utils import secure_filename
@@ -159,10 +160,14 @@ class BucketPresignedUrlResource(Resource):
         return False
 
 
-class BucketUploadProxyResource(Resource):
-    """Resource for uploading files via multipart/form-data proxy."""
+class BucketUploadProxyResource(MethodView):
+    """MethodView for uploading files via multipart/form-data proxy.
+    
+    Uses MethodView instead of Resource to properly handle multipart/form-data
+    which Flask-RESTful doesn't handle well by default.
+    """
+    decorators = [require_jwt_auth()]
 
-    @require_jwt_auth()
     def post(self):
         """
         Upload a file via multipart proxy (alternative to presigned URL).
@@ -221,18 +226,18 @@ class BucketUploadProxyResource(Resource):
             company_id = g.company_id
 
             # Check bucket access (write permission)
-            if not check_bucket_access(
+            allowed, error_msg, status_code = check_bucket_access(
                 bucket_type=bucket_type,
                 bucket_id=bucket_id,
-                user_id=user_id,
-                company_id=company_id,
                 action="write"
-            ):
+            )
+            
+            if not allowed:
                 return (
                     error_schema.dump(
-                        {"error": "ACCESS_DENIED", "message": ACCESS_DENIED}
+                        {"error": "ACCESS_DENIED", "message": error_msg or ACCESS_DENIED}
                     ),
-                    403,
+                    status_code,
                 )
 
             # Secure the filename
@@ -254,7 +259,7 @@ class BucketUploadProxyResource(Resource):
                     logical_path=logical_path,
                     filename=filename,
                     owner_id=user_id,
-                    status="active"
+                    status="approved"
                 )
                 db.session.add(storage_file)
                 db.session.flush()  # Get the file ID
@@ -285,11 +290,12 @@ class BucketUploadProxyResource(Resource):
                 version_number=next_version,
                 object_key=object_key,
                 created_by=user_id,
-                status="active",
+                status="draft",  # Use draft for FileVersion (not approved)
                 size=file_size,
                 mime_type=content_type
             )
             db.session.add(file_version)
+            db.session.flush()  # Flush to generate file_version.id
 
             # Update current version
             storage_file.current_version_id = file_version.id
@@ -379,18 +385,15 @@ class BucketDownloadPresignResource(Resource):
             company_id = g.company_id
 
             # Check bucket access (read permission)
-            if not check_bucket_access(
-                bucket_type=data["bucket_type"],
-                bucket_id=data["bucket_id"],
-                user_id=user_id,
-                company_id=company_id,
-                action="read"
-            ):
+            allowed, error_msg, status_code = check_bucket_access(bucket_type=data["bucket_type"], bucket_id=data["bucket_id"], action="read"
+            )
+            
+            if not allowed:
                 return (
                     error_schema.dump(
-                        {"error": "ACCESS_DENIED", "message": ACCESS_DENIED}
+                        {"error": "ACCESS_DENIED", "message": error_msg or ACCESS_DENIED}
                     ),
-                    403,
+                    status_code,
                 )
 
             # Find the file in database
@@ -400,7 +403,7 @@ class BucketDownloadPresignResource(Resource):
                 logical_path=data["logical_path"]
             ).first()
 
-            if not file_obj or file_obj.status == "deleted":
+            if not file_obj or file_obj.status == "archived":
                 return (
                     error_schema.dump(
                         {"error": "FILE_NOT_FOUND", "message": FILE_NOT_FOUND}
@@ -409,7 +412,7 @@ class BucketDownloadPresignResource(Resource):
                 )
 
             # Get current version's object key
-            if not file_obj.current_version:
+            if not file_obj.current_version_id:
                 return (
                     error_schema.dump(
                         {
@@ -420,7 +423,20 @@ class BucketDownloadPresignResource(Resource):
                     404,
                 )
 
-            object_key = file_obj.current_version.object_key
+            # Get current version object
+            current_version = FileVersion.query.get(file_obj.current_version_id)
+            if not current_version:
+                return (
+                    error_schema.dump(
+                        {
+                            "error": "VERSION_NOT_FOUND",
+                            "message": "Current version not found"
+                        }
+                    ),
+                    404,
+                )
+
+            object_key = current_version.object_key
             expires_in = data.get("expires_in", 3600)
 
             # Generate presigned URL using storage backend
@@ -520,18 +536,15 @@ class BucketDownloadProxyResource(Resource):
             company_id = g.company_id
 
             # Check bucket access (read permission)
-            if not check_bucket_access(
-                bucket_type=data["bucket_type"],
-                bucket_id=data["bucket_id"],
-                user_id=user_id,
-                company_id=company_id,
-                action="read"
-            ):
+            allowed, error_msg, status_code = check_bucket_access(bucket_type=data["bucket_type"], bucket_id=data["bucket_id"], action="read"
+            )
+            
+            if not allowed:
                 return (
                     error_schema.dump(
-                        {"error": "ACCESS_DENIED", "message": ACCESS_DENIED}
+                        {"error": "ACCESS_DENIED", "message": error_msg or ACCESS_DENIED}
                     ),
-                    403,
+                    status_code,
                 )
 
             # Find the file in database
@@ -541,7 +554,7 @@ class BucketDownloadProxyResource(Resource):
                 logical_path=data["logical_path"]
             ).first()
 
-            if not file_obj or file_obj.status == "deleted":
+            if not file_obj or file_obj.status == "archived":
                 return (
                     error_schema.dump(
                         {"error": "FILE_NOT_FOUND", "message": FILE_NOT_FOUND}
@@ -550,7 +563,7 @@ class BucketDownloadProxyResource(Resource):
                 )
 
             # Get current version's object key
-            if not file_obj.current_version:
+            if not file_obj.current_version_id:
                 return (
                     error_schema.dump(
                         {
@@ -561,7 +574,20 @@ class BucketDownloadProxyResource(Resource):
                     404,
                 )
 
-            object_key = file_obj.current_version.object_key
+            # Get current version object
+            current_version = FileVersion.query.get(file_obj.current_version_id)
+            if not current_version:
+                return (
+                    error_schema.dump(
+                        {
+                            "error": "VERSION_NOT_FOUND",
+                            "message": "Current version not found"
+                        }
+                    ),
+                    404,
+                )
+
+            object_key = current_version.object_key
 
             # Get object from MinIO
             response = storage_backend.get_object(storage_key=object_key)
@@ -593,13 +619,13 @@ class BucketDownloadProxyResource(Resource):
 
             # Determine content type
             content_type = (
-                file_obj.current_version.mime_type
-                if hasattr(file_obj.current_version, 'mime_type')
+                current_version.mime_type
+                if hasattr(current_version, 'mime_type') and current_version.mime_type
                 else "application/octet-stream"
             )
 
             return Response(
-                stream_with_context(generate()),
+                generate(),
                 mimetype=content_type,
                 headers={
                     "Content-Disposition": f'attachment; filename="{file_obj.filename}"',

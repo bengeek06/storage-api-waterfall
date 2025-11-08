@@ -15,7 +15,7 @@ from flask_restful import Resource
 from marshmallow import ValidationError, Schema, fields
 
 from app.models.db import db
-from app.models.storage import StorageFile, Lock, AuditLog
+from app.models.storage import StorageFile, Lock, AuditLog, FileVersion
 from app.schemas.storage_schema import (
     LockSchema,
     ErrorResponseSchema,
@@ -91,12 +91,7 @@ class FileDeleteResource(Resource):
                 )
 
             # Check bucket access (delete permission)
-            if not check_bucket_access(
-                bucket_type=file_obj.bucket_type,
-                bucket_id=file_obj.bucket_id,
-                user_id=user_id,
-                company_id=company_id,
-                action="delete"
+            if not check_bucket_access(bucket_type=file_obj.bucket_type, bucket_id=file_obj.bucket_id, action="delete"
             ):
                 return (
                     error_schema.dump(
@@ -105,8 +100,8 @@ class FileDeleteResource(Resource):
                     403,
                 )
 
-            # Logical delete
-            file_obj.status = "deleted"
+            # Logical delete - mark as archived
+            file_obj.status = "archived"
             file_obj.updated_at = datetime.now(timezone.utc)
 
             # Physical delete if requested
@@ -125,7 +120,8 @@ class FileDeleteResource(Resource):
 
             db.session.commit()
 
-            # Log the action
+            # Log the action for audit
+            versions_count = FileVersion.query.filter_by(file_id=file_obj.id).count()
             AuditLog.log_action(
                 file_id=file_obj.id,
                 action="delete",
@@ -133,7 +129,7 @@ class FileDeleteResource(Resource):
                 details={
                     "logical_delete": True,
                     "physical_delete": physical_deleted,
-                    "versions_count": len(file_obj.versions)
+                    "versions_count": versions_count
                 },
                 ip_address=request.remote_addr,
                 user_agent=request.headers.get("User-Agent"),
@@ -231,12 +227,7 @@ class LocksListResource(Resource):
             accessible_locks = []
             for lock in locks:
                 file_obj = lock.file
-                if check_bucket_access(
-                    bucket_type=file_obj.bucket_type,
-                    bucket_id=file_obj.bucket_id,
-                    user_id=user_id,
-                    company_id=company_id,
-                    action="read"
+                if check_bucket_access(bucket_type=file_obj.bucket_type, bucket_id=file_obj.bucket_id, action="read"
                 ):
                     accessible_locks.append(lock)
 

@@ -72,7 +72,13 @@ def register_routes(app):
 
     # Upload operations
     api.add_resource(BucketPresignedUrlResource, "/upload/presign")
-    api.add_resource(BucketUploadProxyResource, "/upload/proxy")
+    # Note: BucketUploadProxyResource is registered separately to handle multipart/form-data
+    # api.add_resource(BucketUploadProxyResource, "/upload/proxy")
+    app.add_url_rule(
+        '/upload/proxy',
+        view_func=BucketUploadProxyResource.as_view('bucket_upload_proxy'),
+        methods=['POST']
+    )
 
     # Download operations
     api.add_resource(BucketDownloadPresignResource, "/download/presign")
