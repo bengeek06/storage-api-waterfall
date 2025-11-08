@@ -86,9 +86,3 @@ class ProductionConfig(Config):
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
     if not SQLALCHEMY_DATABASE_URI:
         raise ValueError(DATABASE_URL_ERROR)
-    
-    # Strict validation for production - no defaults allowed
-    if not os.environ.get("MINIO_SERVICE_URL"):
-        raise ValueError(MINIO_SERVICE_URL_ERROR)
-    if not os.environ.get("PROJECT_SERVICE_URL"):
-        raise ValueError(PROJECT_SERVICE_URL_ERROR)
