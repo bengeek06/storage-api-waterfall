@@ -93,17 +93,26 @@ paths:
           multipart/form-data:
             schema:
               type: object
+              required:
+                - bucket_type
+                - bucket_id
+                - logical_path
+                - file
               properties:
-                bucket:
+                bucket_type:
                   type: string
                   enum: [users, companies, projects]
-                id:
+                  description: Type of bucket
+                bucket_id:
                   type: string
-                path:
+                  description: UUID of the bucket owner
+                logical_path:
                   type: string
+                  description: Logical path for the file
                 file:
                   type: string
                   format: binary
+                  description: File to upload
       responses:
         '201':
           description: uploaded via proxy
@@ -125,15 +134,33 @@ paths:
         - cookieAuth: []
       parameters:
         - in: query
-          name: file_id
+          name: bucket_type
           required: true
           schema:
             type: string
+            enum: [users, companies, projects]
+          description: Type of bucket
         - in: query
-          name: version_id
-          required: false
+          name: bucket_id
+          required: true
           schema:
             type: string
+          description: UUID of the bucket owner
+        - in: query
+          name: logical_path
+          required: true
+          schema:
+            type: string
+          description: Logical path of the file
+        - in: query
+          name: expires_in
+          required: false
+          schema:
+            type: integer
+            default: 3600
+            minimum: 300
+            maximum: 86400
+          description: URL expiration time in seconds
       responses:
         '200':
           description: presigned download url
@@ -151,15 +178,24 @@ paths:
         - cookieAuth: []
       parameters:
         - in: query
-          name: file_id
+          name: bucket_type
           required: true
           schema:
             type: string
+            enum: [users, companies, projects]
+          description: Type of bucket
         - in: query
-          name: version_id
-          required: false
+          name: bucket_id
+          required: true
           schema:
             type: string
+          description: UUID of the bucket owner
+        - in: query
+          name: logical_path
+          required: true
+          schema:
+            type: string
+          description: Logical path of the file
       responses:
         '200':
           description: file stream
@@ -569,59 +605,63 @@ components:
     UploadRequest:
       type: object
       required:
-        - bucket
-        - id
-        - path
-        - filename
-        - size
-        - mime_type
+        - bucket_type
+        - bucket_id
+        - logical_path
       properties:
-        bucket:
+        bucket_type:
           type: string
           enum: [users, companies, projects]
-        id:
+          description: Type of bucket
+        bucket_id:
           type: string
-          description: user_id | company_id | project_id selon bucket
-        path:
+          description: UUID of the bucket owner (user_id | company_id | project_id)
+        logical_path:
           type: string
-          description: "chemin relatif où stocker (ex: /docs/specs)"
-        filename:
+          description: "Logical path where to store the file (ex: /documents/test.pdf)"
+        content_type:
           type: string
-        size:
+          description: MIME type of the file (optional)
+        expires_in:
           type: integer
-        mime_type:
-          type: string
+          default: 3600
+          minimum: 300
+          maximum: 86400
+          description: URL expiration time in seconds
 
     PresignUploadResponse:
       type: object
       properties:
-        status:
+        url:
           type: string
-          example: success
-        data:
-          type: object
-          properties:
-            presigned_url:
-              type: string
-            object_key:
-              type: string
-            expires_in:
-              type: integer
-              description: seconds
+          description: Presigned URL for uploading the file (PUT request)
+        object_key:
+          type: string
+          description: Object key in MinIO storage
+        expires_in:
+          type: integer
+          description: Expiration time in seconds
+        expires_at:
+          type: string
+          format: date-time
+          description: Expiration timestamp
 
     PresignDownloadResponse:
       type: object
       properties:
-        status:
+        url:
           type: string
-          example: success
-        data:
-          type: object
-          properties:
-            presigned_url:
-              type: string
-            expires_in:
-              type: integer
+          description: Presigned URL for downloading the file
+        object_key:
+          type: string
+          description: Object key in MinIO storage
+        expires_in:
+          type: integer
+          description: Expiration time in seconds
+        expires_at:
+          type: string
+          format: date-time
+          description: Expiration timestamp
 
     CopyRequest:
       type: object
