@@ -19,6 +19,35 @@ load_dotenv(
 )
 
 
+@fixture(autouse=True)
+def cleanup_db_connections():
+    """
+    Auto-use fixture to clean up database connections after each test.
+    This prevents ResourceWarnings by ensuring all connections are properly closed.
+    """
+    yield
+    # Cleanup after each test
+    try:
+        # Force close any remaining sessions
+        if hasattr(db.session, 'close'):
+            db.session.close()
+        
+        # Remove session registry
+        if hasattr(db.session, 'remove'):
+            db.session.remove()
+            
+        # Dispose of the engine connection pool
+        if hasattr(db, 'engine') and hasattr(db.engine, 'dispose'):
+            db.engine.dispose()
+            
+        # Force garbage collection to clean up any remaining connections
+        import gc
+        gc.collect()
+    except Exception:
+        # Ignore cleanup errors but don't let them fail tests
+        pass
+
+
 @fixture
 def app():
     """
@@ -37,14 +66,23 @@ def app():
             "TESTING": True,
             "WTF_CSRF_ENABLED": False,
             "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            "SQLALCHEMY_ENGINE_OPTIONS": {
+                "pool_pre_ping": True,
+                "pool_recycle": 300,
+            }
         }
     )
 
     with app.app_context():
         db.create_all()
         yield app
-        db.session.remove()
-        db.drop_all()
+        # Properly close all database connections to avoid ResourceWarnings
+        try:
+            db.session.close()
+            db.session.remove()
+            db.engine.dispose()
+        finally:
+            db.drop_all()
 
 
 @fixture
@@ -64,7 +102,17 @@ def session(app):
     to interact with the database during tests.
     """
     with app.app_context():
-        yield db.session
+        session = db.session
+        try:
+            yield session
+        finally:
+            # Ensure proper cleanup of the session
+            try:
+                session.rollback()
+            except Exception:
+                pass
+            finally:
+                session.close()
 
 
 def get_init_db_payload():
