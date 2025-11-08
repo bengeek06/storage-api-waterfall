@@ -98,8 +98,8 @@ class TestStorageIntegration:
         assert "expires_in" in data
         assert "object_key" in data
         assert data["expires_in"] > 0
-        # URL can be either MinIO direct or proxy URL
-        assert "upload" in data["url"].lower()
+        # URL is a MinIO presigned URL (contains localhost:9000 or X-Amz-Signature)
+        assert ("localhost:9000" in data["url"].lower() or "x-amz-signature" in data["url"].lower())
 
     def test_upload_presign_invalid_path(self, client):
         """Test presigned upload with invalid path."""

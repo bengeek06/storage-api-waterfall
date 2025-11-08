@@ -91,13 +91,18 @@ class FileDeleteResource(Resource):
                 )
 
             # Check bucket access (delete permission)
-            if not check_bucket_access(bucket_type=file_obj.bucket_type, bucket_id=file_obj.bucket_id, action="delete"
-            ):
+            allowed, error_msg, status_code = check_bucket_access(
+                bucket_type=file_obj.bucket_type,
+                bucket_id=file_obj.bucket_id,
+                action="delete"
+            )
+            
+            if not allowed:
                 return (
                     error_schema.dump(
-                        {"error": "ACCESS_DENIED", "message": ACCESS_DENIED}
+                        {"error": "ACCESS_DENIED", "message": error_msg or ACCESS_DENIED}
                     ),
-                    403,
+                    status_code,
                 )
 
             # Logical delete - mark as archived
@@ -227,23 +232,16 @@ class LocksListResource(Resource):
             accessible_locks = []
             for lock in locks:
                 file_obj = lock.file
-                if check_bucket_access(bucket_type=file_obj.bucket_type, bucket_id=file_obj.bucket_id, action="read"
-                ):
+                allowed, _, _ = check_bucket_access(
+                    bucket_type=file_obj.bucket_type,
+                    bucket_id=file_obj.bucket_id,
+                    action="read"
+                )
+                if allowed:
                     accessible_locks.append(lock)
 
-            # Log the action
-            AuditLog.log_action(
-                file_id=None,
-                action="download",  # Listing is a read operation
-                user_id=user_id,
-                details={
-                    "action": "list_locks",
-                    "filters": filters,
-                    "count": len(accessible_locks)
-                },
-                ip_address=request.remote_addr,
-                user_agent=request.headers.get("User-Agent"),
-            )
+            # Note: No audit log for list operations as there's no specific file_id
+            # and AuditLog requires file_id (nullable=False)
 
             logger.info(f"Listed {len(accessible_locks)} locks for user {user_id}")
 
