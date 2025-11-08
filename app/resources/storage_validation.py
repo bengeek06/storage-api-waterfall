@@ -28,7 +28,7 @@ from app.schemas.storage_schema import (
     SuccessResponseSchema,
 )
 from app.logger import logger
-from app.utils import require_jwt_auth, extract_jwt_data
+from app.utils import require_jwt_auth
 
 # Constants
 INVALID_REQUEST_DATA = "Invalid request data"
