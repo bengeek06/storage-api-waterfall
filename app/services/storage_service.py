@@ -52,8 +52,14 @@ class StorageBackendService:
             secure=(parsed.scheme == "https"),
         )
 
-        # Ensure bucket exists at startup
-        self._ensure_bucket_exists()
+        # Ensure bucket exists at startup (best-effort)
+        # Skip if in testing mode without MinIO available
+        if os.environ.get("FLASK_ENV") != "testing":
+            try:
+                self._ensure_bucket_exists()
+            except Exception:  # pylint: disable=broad-exception-caught
+                # _ensure_bucket_exists already logs errors; swallow to allow app to start
+                pass
 
     def _ensure_bucket_exists(self):
         """
@@ -221,5 +227,39 @@ class StorageBackendService:
         return None
 
 
-# Global instance for use across the application
-storage_backend = StorageBackendService()
+class _LazyStorageBackendProxy:
+    """Lazy proxy for StorageBackendService.
+
+    This avoids instantiating the real backend (which performs network I/O)
+    at import time. On first attribute access the real backend is created and
+    replaced in the module global so subsequent accesses hit the real object.
+    """
+
+    def __init__(self):
+        self._lock = __import__("threading").Lock()
+        self._real = None
+
+    def _init_real(self):
+        if self._real is None:
+            with self._lock:
+                if self._real is None:
+                    logger.info("Initializing lazy StorageBackendService instance")
+                    try:
+                        real = StorageBackendService()
+                    except Exception:
+                        # If initialization fails, keep proxy in place and re-raise
+                        logger.exception("Failed to initialize StorageBackendService")
+                        raise
+                    # replace module-level name for future imports/uses
+                    globals()["storage_backend"] = real
+                    self._real = real
+
+    def __getattr__(self, item):
+        self._init_real()
+        return getattr(self._real, item)
+
+
+# Export a proxy instance at module import time so other modules can import
+# `storage_backend` without triggering network I/O during import. The proxy
+# will instantiate the real backend on first use.
+storage_backend = _LazyStorageBackendProxy()
