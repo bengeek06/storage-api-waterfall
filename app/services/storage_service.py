@@ -12,6 +12,9 @@ from typing import Optional, Tuple
 from urllib.parse import urlparse
 
 from minio import Minio
+from minio.error import S3Error
+
+from app.logger import logger
 
 
 class StorageBackendService:
@@ -37,12 +40,41 @@ class StorageBackendService:
         parsed = urlparse(minio_url)
         minio_endpoint = f"{parsed.hostname}:{parsed.port or 9000}"
 
+        logger.info(
+            f"Initializing MinIO client - endpoint: {minio_endpoint}, "
+            f"bucket: {self.bucket_name}"
+        )
+
         self.minio_client = Minio(
             minio_endpoint,
             access_key=access_key,
             secret_key=secret_key,
             secure=(parsed.scheme == "https"),
         )
+
+        # Ensure bucket exists at startup
+        self._ensure_bucket_exists()
+
+    def _ensure_bucket_exists(self):
+        """
+        Ensure the configured bucket exists, create it if not.
+        """
+        try:
+            logger.debug(f"Checking if bucket '{self.bucket_name}' exists")
+            if not self.minio_client.bucket_exists(self.bucket_name):
+                logger.info(
+                    f"Bucket '{self.bucket_name}' does not exist, creating it..."
+                )
+                self.minio_client.make_bucket(self.bucket_name)
+                logger.info(f"Successfully created bucket '{self.bucket_name}'")
+            else:
+                logger.info(f"Bucket '{self.bucket_name}' already exists")
+        except S3Error as exc:
+            logger.error(
+                f"Failed to ensure bucket '{self.bucket_name}' exists: {exc}",
+                exc_info=True
+            )
+            # Don't raise - let the service start, bucket will be created on first use
 
     def generate_upload_url(
         self,
@@ -59,9 +91,8 @@ class StorageBackendService:
         Returns:
             tuple: (presigned_url, expires_in_seconds)
         """
-        # Ensure bucket exists
-        if not self.minio_client.bucket_exists(self.bucket_name):
-            self.minio_client.make_bucket(self.bucket_name)
+        # Ensure bucket exists (in case it was deleted)
+        self._ensure_bucket_exists()
 
         # Generate presigned PUT URL
         presigned_url = self.minio_client.presigned_put_object(
