@@ -345,6 +345,7 @@ class FileVersion(db.Model):
             "pending_validation",
             "validated",
             "rejected",
+            "corrupted",
             name="version_status",
         ),
         nullable=False,

@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from flask import request, g
 from flask_restful import Resource
 from marshmallow import ValidationError, Schema, fields
+from minio.error import S3Error
 
 from app.models.db import db
 from app.models.storage import StorageFile, Lock, AuditLog, FileVersion
@@ -123,7 +124,7 @@ class FileDeleteResource(Resource):
                     try:
                         storage_backend.delete_object(version.object_key)
                         physical_deleted = True
-                    except Exception as e:  # pylint: disable=broad-exception-caught
+                    except S3Error as e:
                         logger.warning(
                             f"Failed to delete object {version.object_key}: {e}"
                         )
