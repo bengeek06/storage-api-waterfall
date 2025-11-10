@@ -118,8 +118,11 @@ class FileDeleteResource(Resource):
             # Physical delete if requested
             physical_deleted = False
             if data.get("physical", False):
+                # Get all versions (convert to list to avoid lazy loading issues)
+                versions = list(file_obj.versions)
+                versions_count = len(versions)
+
                 # Delete all versions from MinIO
-                versions = file_obj.versions
                 for version in versions:
                     try:
                         storage_backend.delete_object(version.object_key)
@@ -129,6 +132,45 @@ class FileDeleteResource(Resource):
                             f"Failed to delete object {version.object_key}: {e}"
                         )
 
+                # Log the action for audit BEFORE deleting from DB
+                AuditLog.log_action(
+                    file_id=file_obj.id,
+                    action="delete",
+                    user_id=user_id,
+                    details={
+                        "logical_delete": True,
+                        "physical_delete": physical_deleted,
+                        "versions_count": versions_count,
+                    },
+                    ip_address=request.remote_addr,
+                    user_agent=request.headers.get("User-Agent"),
+                )
+
+                # Delete from database (cascade will delete FileVersion and Lock records)
+                file_id = file_obj.id
+                db.session.delete(file_obj)
+                db.session.commit()
+
+                logger.info(
+                    f"File {file_id} physically deleted "
+                    f"(MinIO objects and DB records removed)"
+                )
+
+                return (
+                    success_schema.dump(
+                        {
+                            "message": "File deleted successfully",
+                            "data": {
+                                "file_id": str(file_id),
+                                "logical_delete": True,
+                                "physical_delete": physical_deleted,
+                            },
+                        }
+                    ),
+                    200,
+                )
+
+            # Logical delete only - commit the archived status
             db.session.commit()
 
             # Log the action for audit
@@ -141,7 +183,7 @@ class FileDeleteResource(Resource):
                 user_id=user_id,
                 details={
                     "logical_delete": True,
-                    "physical_delete": physical_deleted,
+                    "physical_delete": False,
                     "versions_count": versions_count,
                 },
                 ip_address=request.remote_addr,
