@@ -275,6 +275,191 @@ class TestStorageCollaborative(unittest.TestCase):
         data = json.loads(response.data)
         self.assertEqual(data["file"]["filename"], "test.txt")
 
+    def test_metadata_patch_success(self):
+        """Test successful metadata update via PATCH."""
+        self.authenticate_user()
+
+        # Create test file
+        file_obj = StorageFile(
+            bucket_type="users",
+            bucket_id=self.user_id,
+            logical_path="documents/test.txt",
+            filename="test.txt",
+            owner_id=self.user_id,
+            mime_type="text/plain",
+            size=1024,
+            tags={"original": "value"},
+        )
+        db.session.add(file_obj)
+        db.session.commit()
+
+        # Update metadata
+        response = self.client.patch(
+            "/metadata",
+            query_string={
+                "bucket": "users",
+                "id": self.user_id,
+                "logical_path": "documents/test.txt",
+            },
+            json={
+                "tags": {"category": "documentation", "priority": "high"},
+                "description": "Updated description",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertTrue(data["success"])
+        self.assertIn("updated_fields", data["data"])
+
+        # Verify changes in database
+        updated_file = db.session.get(StorageFile, file_obj.id)
+        self.assertEqual(updated_file.tags["category"], "documentation")
+        self.assertEqual(
+            updated_file.tags["description"], "Updated description"
+        )
+
+    def test_metadata_patch_tags_only(self):
+        """Test metadata update with tags only."""
+        self.authenticate_user()
+
+        # Create test file
+        file_obj = StorageFile(
+            bucket_type="users",
+            bucket_id=self.user_id,
+            logical_path="documents/test.txt",
+            filename="test.txt",
+            owner_id=self.user_id,
+        )
+        db.session.add(file_obj)
+        db.session.commit()
+
+        # Update only tags
+        response = self.client.patch(
+            "/metadata",
+            query_string={
+                "bucket": "users",
+                "id": self.user_id,
+                "logical_path": "documents/test.txt",
+            },
+            json={"tags": {"new_tag": "new_value"}},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        updated_file = db.session.get(StorageFile, file_obj.id)
+        self.assertEqual(updated_file.tags["new_tag"], "new_value")
+
+    def test_metadata_patch_description_only(self):
+        """Test metadata update with description only."""
+        self.authenticate_user()
+
+        # Create test file
+        file_obj = StorageFile(
+            bucket_type="users",
+            bucket_id=self.user_id,
+            logical_path="documents/test.txt",
+            filename="test.txt",
+            owner_id=self.user_id,
+        )
+        db.session.add(file_obj)
+        db.session.commit()
+
+        # Update only description
+        response = self.client.patch(
+            "/metadata",
+            query_string={
+                "bucket": "users",
+                "id": self.user_id,
+                "logical_path": "documents/test.txt",
+            },
+            json={"description": "My description"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        # Reload file from database to get fresh data
+        db.session.refresh(file_obj)
+        self.assertIsNotNone(file_obj.tags)
+        self.assertEqual(file_obj.tags["description"], "My description")
+
+    def test_metadata_patch_file_not_found(self):
+        """Test PATCH metadata for non-existent file."""
+        self.authenticate_user()
+
+        response = self.client.patch(
+            "/metadata",
+            query_string={
+                "bucket": "users",
+                "id": self.user_id,
+                "logical_path": "nonexistent/file.txt",
+            },
+            json={"tags": {"key": "value"}},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        data = json.loads(response.data)
+        self.assertEqual(data["error"], "FILE_NOT_FOUND")
+
+    def test_metadata_patch_access_denied(self):
+        """Test PATCH metadata without access."""
+        self.authenticate_user()
+
+        # Create file in another user's bucket
+        other_user_id = str(uuid.uuid4())
+        file_obj = StorageFile(
+            bucket_type="users",
+            bucket_id=other_user_id,
+            logical_path="documents/test.txt",
+            filename="test.txt",
+            owner_id=other_user_id,
+        )
+        db.session.add(file_obj)
+        db.session.commit()
+
+        response = self.client.patch(
+            "/metadata",
+            query_string={
+                "bucket": "users",
+                "id": other_user_id,
+                "logical_path": "documents/test.txt",
+            },
+            json={"tags": {"key": "value"}},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        data = json.loads(response.data)
+        self.assertEqual(data["error"], "ACCESS_DENIED")
+
+    def test_metadata_patch_invalid_data(self):
+        """Test PATCH metadata with invalid request body."""
+        self.authenticate_user()
+
+        # Create test file
+        file_obj = StorageFile(
+            bucket_type="users",
+            bucket_id=self.user_id,
+            logical_path="documents/test.txt",
+            filename="test.txt",
+            owner_id=self.user_id,
+        )
+        db.session.add(file_obj)
+        db.session.commit()
+
+        # Send invalid data (tags should be dict, not string)
+        response = self.client.patch(
+            "/metadata",
+            query_string={
+                "bucket": "users",
+                "id": self.user_id,
+                "logical_path": "documents/test.txt",
+            },
+            json={"tags": "invalid_string_instead_of_dict"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertEqual(data["error"], "VALIDATION_ERROR")
+
 
 if __name__ == "__main__":
     unittest.main()

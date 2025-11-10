@@ -406,10 +406,31 @@ paths:
         - cookieAuth: []
       parameters:
         - in: query
-          name: file_id
+          name: bucket
           required: true
           schema:
             type: string
+            enum: [users, companies, projects]
+          description: Bucket type
+        - in: query
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Bucket ID (user_id, company_id, or project_id)
+        - in: query
+          name: logical_path
+          required: true
+          schema:
+            type: string
+          description: File path within bucket
+        - in: query
+          name: include_versions
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Include version history
       responses:
         '200':
           description: metadata
@@ -422,6 +443,23 @@ paths:
       summary: Update file metadata (tags, description)
       security:
         - cookieAuth: []
+      parameters:
+        - in: query
+          name: bucket
+          required: true
+          schema:
+            type: string
+            enum: [users, companies, projects]
+        - in: query
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: logical_path
+          required: true
+          schema:
+            type: string
       requestBody:
         content:
           application/json:
@@ -547,21 +585,20 @@ components:
     StandardListResponse:
       type: object
       properties:
-        status:
-          type: string
-          example: success
-        data:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileMetadata'
+        pagination:
           type: object
           properties:
-            items:
-              type: array
-              items:
-                $ref: '#/components/schemas/FileMetadata'
-            total:
-              type: integer
             page:
               type: integer
             limit:
+              type: integer
+            total_items:
+              type: integer
+            total_pages:
               type: integer
 
     FileMetadata:

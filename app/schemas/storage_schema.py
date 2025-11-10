@@ -262,6 +262,13 @@ class FileInfoResponseSchema(Schema):
     audit_logs = fields.List(fields.Nested(AuditLogSchema), allow_none=True)
 
 
+class MetadataUpdateRequestSchema(Schema):
+    """Schema for /metadata PATCH request body."""
+
+    tags = fields.Dict(allow_none=True)
+    description = fields.String(allow_none=True)
+
+
 # Legacy schemas for APIs not yet migrated
 
 
