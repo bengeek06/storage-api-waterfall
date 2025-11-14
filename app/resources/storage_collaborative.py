@@ -2,32 +2,31 @@
 storage_collaborative.py
 ------------------------
 
-New REST resources for the collaborative storage system with bucket-based architecture.
-Implements endpoints for file operations with buckets, locks, and validation workflow.
+Collaborative storage system resources - Re-exports for backward compatibility.
 
-Resources:
-    - BucketListResource: List files in a bucket
-    - FileCopyResource: Copy files between buckets
-    - FileLockResource: Lock files for editing
-    - FileUnlockResource: Unlock files
-    - FileInfoResource: Get comprehensive file information
+This module has been split into smaller, focused modules:
+- storage_base.py: Base classes
+- storage_bucket.py: Bucket operations (list)
+- storage_locks.py: Lock/unlock operations
+
+For new code, import directly from the specific modules.
+This file maintains backward compatibility by re-exporting all resources.
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
+
 from flask import request, g
 from flask_restful import Resource
 from marshmallow import ValidationError
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.models.db import db
 from app.models.storage import StorageFile, FileVersion, Lock, AuditLog
 from app.schemas.storage_schema import (
-    FileListRequestSchema,
-    FileListResponseSchema,
     FileCopyRequestSchema,
-    LockRequestSchema,
-    UnlockRequestSchema,
     FileInfoRequestSchema,
     FileInfoResponseSchema,
+    MetadataUpdateRequestSchema,
     StorageFileSchema,
     ErrorResponseSchema,
     SuccessResponseSchema,
@@ -35,167 +34,27 @@ from app.schemas.storage_schema import (
 from app.logger import logger
 from app.utils import require_jwt_auth
 from app.services.storage_service import storage_backend
+from app.resources.storage_base import BaseStorageResource
+from app.resources.storage_bucket import BucketListResource
+from app.resources.storage_locks import FileLockResource, FileUnlockResource
 
 # Initialize schemas
-file_list_request_schema = FileListRequestSchema()
-file_list_response_schema = FileListResponseSchema()
 file_copy_request_schema = FileCopyRequestSchema()
-lock_request_schema = LockRequestSchema()
-unlock_request_schema = UnlockRequestSchema()
 file_info_request_schema = FileInfoRequestSchema()
 file_info_response_schema = FileInfoResponseSchema()
+metadata_update_request_schema = MetadataUpdateRequestSchema()
 storage_file_schema = StorageFileSchema()
 error_schema = ErrorResponseSchema()
 success_schema = SuccessResponseSchema()
 
-
-class BaseStorageResource:
-    """Base class with common functionality for storage resources."""
-
-    def _check_bucket_access(self, bucket, bucket_id, user_id, company_id):
-        """
-        Check if user has access to the bucket.
-
-        Args:
-            bucket (str): Type of bucket (users/companies/projects)
-            bucket_id (str): Bucket ID
-            user_id (str): Current user ID
-            company_id (str): Current user's company ID
-
-        Returns:
-            bool: True if access allowed
-        """
-        if bucket == "users":
-            # User can only access their own bucket
-            return bucket_id == user_id
-        if bucket == "companies":
-            # User can access their company's bucket
-            return bucket_id == company_id
-        if bucket == "projects":
-            # Project access control is delegated to the project service
-            # via check_bucket_access() in app.utils
-            return True
-
-        return False
-
-
-class BucketListResource(Resource, BaseStorageResource):
-    """Resource for listing files in a bucket."""
-
-    @require_jwt_auth()
-    def get(self):
-        """
-        List files in a bucket with pagination.
-
-        Query parameters:
-        - bucket_type: Type of bucket (users/companies/projects)
-        - bucket_id: UUID of the bucket
-        - path: Optional directory path within bucket
-        - page: Page number (default: 1)
-        - limit: Items per page (default: 50, max: 1000)
-
-        Returns:
-        - 200: List of files with pagination info
-        - 400: Validation error
-        - 403: Access denied
-        - 500: Server error
-        """
-        try:
-            # Validate request parameters
-            args = file_list_request_schema.load(request.args)
-
-            bucket = args["bucket"]  # OpenAPI uses 'bucket' not 'bucket_type'
-            bucket_id = args["id"]  # OpenAPI uses 'id' not 'bucket_id'
-            path = args.get("path", "")
-            page = args.get("page", 1)
-            limit = args.get("limit", 50)
-
-            # Get current user info from g (set by @require_jwt_auth decorator)
-            user_id = g.user_id
-            company_id = g.company_id
-
-            # Check access permissions
-            if not self._check_bucket_access(
-                bucket, bucket_id, user_id, company_id
-            ):
-                return (
-                    error_schema.dump(
-                        {
-                            "error": "ACCESS_DENIED",
-                            "message": "You do not have access to this bucket",
-                        }
-                    ),
-                    403,
-                )
-
-            # List files in the bucket
-            files, total_count = StorageFile.list_directory(
-                bucket_type=bucket,  # Use bucket as bucket_type for model
-                bucket_id=bucket_id,
-                path=path,
-                page=page,
-                limit=limit,
-            )
-
-            # Calculate pagination info
-            total_pages = (total_count + limit - 1) // limit
-
-            # Prepare response
-            response_data = {
-                "files": files,  # Pass raw objects, let the schema handle serialization
-                "pagination": {
-                    "page": page,
-                    "limit": limit,
-                    "total_items": total_count,
-                    "total_pages": total_pages,
-                },
-            }
-
-            # Log the action
-            if files:
-                AuditLog.log_action(
-                    file_id=files[
-                        0
-                    ].id,  # Log for first file as representative
-                    action="download",  # Directory listing is considered a form of access
-                    user_id=user_id,
-                    details={
-                        "action": "list_directory",
-                        "path": path,
-                        "count": len(files),
-                    },
-                    ip_address=request.remote_addr,
-                    user_agent=request.headers.get("User-Agent"),
-                )
-
-            return file_list_response_schema.dump(response_data), 200
-
-        except ValidationError as e:
-            logger.warning(f"Validation error in bucket list: {e.messages}")
-            return (
-                error_schema.dump(
-                    {
-                        "error": "VALIDATION_ERROR",
-                        "message": "Invalid request parameters",
-                        "details": e.messages,
-                    }
-                ),
-                400,
-            )
-
-        except (ValueError, TypeError, LookupError) as e:
-            logger.error(
-                f"Error listing bucket files: {str(e)}", exc_info=True
-            )
-            return (
-                error_schema.dump(
-                    {
-                        "error": "SERVER_ERROR",
-                        "message": "Failed to list files",
-                    }
-                ),
-                500,
-            )
+__all__ = [
+    "BaseStorageResource",
+    "BucketListResource",
+    "FileCopyResource",
+    "FileLockResource",
+    "FileUnlockResource",
+    "FileInfoResource",
+]
 
 
 class FileCopyResource(Resource, BaseStorageResource):
@@ -474,255 +333,6 @@ class FileCopyResource(Resource, BaseStorageResource):
         return copied_file
 
 
-class FileLockResource(Resource):
-    """Resource for locking files."""
-
-    @require_jwt_auth()
-    def post(self):
-        """
-        Lock a file for editing or review.
-
-        Request body:
-        - file_id: UUID of the file to lock
-        - lock_type: Type of lock (edit/review/admin)
-        - reason: Optional reason for the lock
-        - expires_in: Optional expiration time in seconds
-
-        Returns:
-        - 200: File locked successfully
-        - 400: Validation error
-        - 403: Access denied
-        - 404: File not found
-        - 409: File already locked
-        - 500: Server error
-        """
-        try:
-            # Validate request
-            data = lock_request_schema.load(request.get_json())
-
-            # Get current user info
-            # Get current user info from g (set by @require_jwt_auth decorator)
-            user_id = g.user_id
-
-            # Find the file
-            file_obj = StorageFile.get_by_file_id(data["file_id"])
-            if not file_obj:
-                return (
-                    error_schema.dump(
-                        {
-                            "error": "FILE_NOT_FOUND",
-                            "message": "File not found",
-                        }
-                    ),
-                    404,
-                )
-
-            # Check if file is already locked
-            existing_lock = file_obj.is_locked()
-            if existing_lock:
-                return (
-                    error_schema.dump(
-                        {
-                            "error": "FILE_LOCKED",
-                            "message": f"File is already locked by user {existing_lock.locked_by}",
-                            "details": {
-                                "lock_id": existing_lock.id,
-                                "locked_by": existing_lock.locked_by,
-                                "lock_type": existing_lock.lock_type,
-                                "created_at": existing_lock.created_at.isoformat(),
-                            },
-                        }
-                    ),
-                    409,
-                )
-
-            # Create expiration time if specified
-            expires_at = None
-            if data.get("expires_in"):
-                expires_at = datetime.now(timezone.utc) + timedelta(
-                    seconds=data["expires_in"]
-                )
-
-            # Create the lock
-            lock = Lock.create(
-                file_id=data["file_id"],
-                locked_by=user_id,
-                lock_type=data.get("lock_type", "edit"),
-                reason=data.get("reason"),
-                expires_at=expires_at,
-            )
-
-            # Log the action
-            AuditLog.log_action(
-                file_id=data["file_id"],
-                action="lock",
-                user_id=user_id,
-                details={
-                    "lock_type": lock.lock_type,
-                    "reason": lock.reason,
-                    "expires_at": (
-                        expires_at.isoformat() if expires_at else None
-                    ),
-                },
-                ip_address=request.remote_addr,
-                user_agent=request.headers.get("User-Agent"),
-            )
-
-            return (
-                success_schema.dump(
-                    {
-                        "message": "File locked successfully",
-                        "data": {
-                            "lock_id": lock.id,
-                            "expires_at": (
-                                expires_at.isoformat() if expires_at else None
-                            ),
-                        },
-                    }
-                ),
-                200,
-            )
-
-        except ValidationError as e:
-            logger.warning(f"Validation error in file lock: {e.messages}")
-            return (
-                error_schema.dump(
-                    {
-                        "error": "VALIDATION_ERROR",
-                        "message": "Invalid request data",
-                        "details": e.messages,
-                    }
-                ),
-                400,
-            )
-
-        except (ValueError, TypeError, LookupError) as e:
-            logger.error(f"Error locking file: {str(e)}", exc_info=True)
-            return (
-                error_schema.dump(
-                    {"error": "SERVER_ERROR", "message": "Failed to lock file"}
-                ),
-                500,
-            )
-
-
-class FileUnlockResource(Resource):
-    """Resource for unlocking files."""
-
-    @require_jwt_auth()
-    def post(self):
-        """
-        Unlock a file.
-
-        Request body:
-        - file_id: UUID of the file to unlock
-        - force: Whether to force unlock (admin only)
-
-        Returns:
-        - 200: File unlocked successfully
-        - 400: Validation error
-        - 403: Access denied
-        - 404: File not found or not locked
-        - 500: Server error
-        """
-        try:
-            # Validate request
-            data = unlock_request_schema.load(request.get_json())
-
-            # Get current user info
-            # Get current user info from g (set by @require_jwt_auth decorator)
-            user_id = g.user_id
-
-            # Find the file
-            file_obj = StorageFile.get_by_file_id(data["file_id"])
-            if not file_obj:
-                return (
-                    error_schema.dump(
-                        {
-                            "error": "FILE_NOT_FOUND",
-                            "message": "File not found",
-                        }
-                    ),
-                    404,
-                )
-
-            # Check if file is locked
-            lock = file_obj.is_locked()
-            if not lock:
-                return (
-                    error_schema.dump(
-                        {
-                            "error": "FILE_NOT_LOCKED",
-                            "message": "File is not currently locked",
-                        }
-                    ),
-                    404,
-                )
-
-            # Check if user can release the lock
-            force_unlock = data.get("force", False)
-            if not lock.can_be_released_by(user_id) and not force_unlock:
-                return (
-                    error_schema.dump(
-                        {
-                            "error": "ACCESS_DENIED",
-                            "message": "You do not have permission to unlock this file",
-                        }
-                    ),
-                    403,
-                )
-
-            # Note: force_unlock currently allowed for lock owner
-            # Future: check admin privileges via project service for force_unlock by non-owner
-
-            # Release the lock
-            lock.release(_released_by=user_id)
-
-            # Log the action
-            AuditLog.log_action(
-                file_id=data["file_id"],
-                action="unlock",
-                user_id=user_id,
-                details={
-                    "lock_id": lock.id,
-                    "force_unlock": force_unlock,
-                    "original_locked_by": lock.locked_by,
-                },
-                ip_address=request.remote_addr,
-                user_agent=request.headers.get("User-Agent"),
-            )
-
-            return (
-                success_schema.dump({"message": "File unlocked successfully"}),
-                200,
-            )
-
-        except ValidationError as e:
-            logger.warning(f"Validation error in file unlock: {e.messages}")
-            return (
-                error_schema.dump(
-                    {
-                        "error": "VALIDATION_ERROR",
-                        "message": "Invalid request data",
-                        "details": e.messages,
-                    }
-                ),
-                400,
-            )
-
-        except (ValueError, TypeError, AttributeError, LookupError) as e:
-            logger.error(f"Error unlocking file: {str(e)}", exc_info=True)
-            return (
-                error_schema.dump(
-                    {
-                        "error": "SERVER_ERROR",
-                        "message": "Failed to unlock file",
-                    }
-                ),
-                500,
-            )
-
-
 class FileInfoResource(Resource, BaseStorageResource):
     """Resource for getting comprehensive file information."""
 
@@ -859,6 +469,148 @@ class FileInfoResource(Resource, BaseStorageResource):
                     {
                         "error": "SERVER_ERROR",
                         "message": "Failed to get file information",
+                    }
+                ),
+                500,
+            )
+
+    @require_jwt_auth()
+    def patch(self):
+        """
+        Update file metadata (tags, description).
+
+        Query parameters:
+        - bucket: Bucket type (users/companies/projects)
+        - id: Bucket ID
+        - logical_path: File path
+
+        Request body:
+        - tags: Dictionary of tags (optional)
+        - description: File description (optional)
+
+        Returns:
+        - 200: Metadata updated
+        - 400: Validation error
+        - 403: Access denied
+        - 404: File not found
+        - 500: Server error
+        """
+        try:
+            # Validate query parameters
+            args = file_info_request_schema.load(request.args)
+
+            # Validate request body
+            data = metadata_update_request_schema.load(request.get_json())
+
+            # Get current user info
+            user_id = g.user_id
+            company_id = g.company_id
+
+            # Check bucket access (write permission)
+            if not self._check_bucket_access(
+                args["bucket"],
+                args["id"],
+                user_id,
+                company_id,
+            ):
+                return (
+                    error_schema.dump(
+                        {
+                            "error": "ACCESS_DENIED",
+                            "message": "No access to this bucket",
+                        }
+                    ),
+                    403,
+                )
+
+            # Find the file
+            file_obj = StorageFile.get_by_path(
+                bucket_type=args["bucket"],
+                bucket_id=args["id"],
+                logical_path=args["logical_path"],
+            )
+
+            if not file_obj:
+                return (
+                    error_schema.dump(
+                        {
+                            "error": "FILE_NOT_FOUND",
+                            "message": "File not found",
+                        }
+                    ),
+                    404,
+                )
+
+            # Update metadata
+            updated_fields = {}
+            if "tags" in data:
+                file_obj.tags = data["tags"]
+                updated_fields["tags"] = data["tags"]
+
+            # Note: 'description' is not a field in StorageFile model
+            # If needed, it should be added to the tags dictionary
+            if "description" in data:
+                if file_obj.tags is None:
+                    file_obj.tags = {}
+                file_obj.tags["description"] = data["description"]
+                updated_fields["description"] = data["description"]
+                # Mark the tags field as modified for SQLAlchemy to detect changes
+                flag_modified(file_obj, "tags")
+
+            file_obj.updated_at = datetime.now(timezone.utc)
+            db.session.commit()
+
+            # Log the action
+            AuditLog.log_action(
+                file_id=file_obj.id,
+                action="upload",  # Metadata update is considered modification
+                user_id=user_id,
+                details={
+                    "action": "update_metadata",
+                    "updated_fields": updated_fields,
+                },
+                ip_address=request.remote_addr,
+                user_agent=request.headers.get("User-Agent"),
+            )
+
+            logger.info(f"Updated metadata for file {file_obj.id}")
+
+            return (
+                success_schema.dump(
+                    {
+                        "message": "Metadata updated successfully",
+                        "data": {
+                            "file_id": file_obj.id,
+                            "updated_fields": updated_fields,
+                        },
+                    }
+                ),
+                200,
+            )
+
+        except ValidationError as e:
+            logger.warning(
+                f"Validation error in metadata update: {e.messages}"
+            )
+            return (
+                error_schema.dump(
+                    {
+                        "error": "VALIDATION_ERROR",
+                        "message": "Invalid request data",
+                        "details": e.messages,
+                    }
+                ),
+                400,
+            )
+
+        except (ValueError, TypeError, AttributeError, LookupError) as e:
+            db.session.rollback()
+            logger.error(f"Error updating metadata: {str(e)}", exc_info=True)
+            return (
+                error_schema.dump(
+                    {
+                        "error": "SERVER_ERROR",
+                        "message": "Failed to update metadata",
                     }
                 ),
                 500,

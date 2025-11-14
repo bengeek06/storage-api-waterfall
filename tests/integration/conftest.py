@@ -322,8 +322,12 @@ def sample_file_with_content(
             minio_client.remove_object(storage_bucket, object_key)
         except S3Error:
             pass
-        database.session.delete(file_obj)
-        database.session.commit()
+
+        # Check if file still exists before trying to delete
+        database.session.expire_all()  # Refresh session to get latest state
+        if database.session.get(StorageFile, file_obj.id) is not None:
+            database.session.delete(file_obj)
+            database.session.commit()
 
 
 @pytest.fixture

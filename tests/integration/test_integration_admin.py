@@ -67,10 +67,10 @@ class TestFileDelete:
         assert json_data["data"]["logical_delete"] is True
         # physical_delete peut être True ou False selon si MinIO était accessible
 
-        # Vérifier que le fichier est marqué comme deleted
+        # Vérifier que le fichier a été complètement supprimé de la DB
         db.expire_all()
         file_obj = StorageFile.get_by_file_id(file_id)
-        assert file_obj.status == "archived"
+        assert file_obj is None, "File should be completely deleted from database"
 
     def test_delete_file_not_found(
         self, client, test_user_id, test_company_id

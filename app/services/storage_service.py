@@ -72,13 +72,15 @@ class StorageBackendService:
                     f"Bucket '{self.bucket_name}' does not exist, creating it..."
                 )
                 self.minio_client.make_bucket(self.bucket_name)
-                logger.info(f"Successfully created bucket '{self.bucket_name}'")
+                logger.info(
+                    f"Successfully created bucket '{self.bucket_name}'"
+                )
             else:
                 logger.info(f"Bucket '{self.bucket_name}' already exists")
         except S3Error as exc:
             logger.error(
                 f"Failed to ensure bucket '{self.bucket_name}' exists: {exc}",
-                exc_info=True
+                exc_info=True,
             )
             # Don't raise - let the service start, bucket will be created on first use
 
@@ -243,12 +245,16 @@ class _LazyStorageBackendProxy:
         if self._real is None:
             with self._lock:
                 if self._real is None:
-                    logger.info("Initializing lazy StorageBackendService instance")
+                    logger.info(
+                        "Initializing lazy StorageBackendService instance"
+                    )
                     try:
                         real = StorageBackendService()
                     except Exception:
                         # If initialization fails, keep proxy in place and re-raise
-                        logger.exception("Failed to initialize StorageBackendService")
+                        logger.exception(
+                            "Failed to initialize StorageBackendService"
+                        )
                         raise
                     # replace module-level name for future imports/uses
                     globals()["storage_backend"] = real

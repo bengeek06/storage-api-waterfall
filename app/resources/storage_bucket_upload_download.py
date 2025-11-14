@@ -19,6 +19,7 @@ from flask.views import MethodView
 from flask_restful import Resource
 from marshmallow import ValidationError
 from werkzeug.utils import secure_filename
+from minio.error import S3Error
 
 from app.schemas.storage_schema import (
     PresignedUrlRequestSchema,
@@ -616,7 +617,37 @@ class BucketDownloadProxyResource(Resource):
             object_key = current_version.object_key
 
             # Get object from MinIO
-            response = storage_backend.get_object(storage_key=object_key)
+            try:
+                response = storage_backend.get_object(storage_key=object_key)
+            except S3Error as exc:
+                if exc.code == "NoSuchKey":
+                    logger.warning(
+                        f"File not found in storage: {object_key}",
+                        extra={
+                            "error_code": exc.code,
+                            "file_id": file_obj.id,
+                            "version_id": current_version.id,
+                        },
+                    )
+
+                    # Mark the file version as corrupted (file missing in storage)
+                    current_version.status = "corrupted"
+                    db.session.commit()
+
+                    return (
+                        error_schema.dump(
+                            {
+                                "error": "FILE_NOT_FOUND_IN_STORAGE",
+                                "message": "File exists in database but not in storage",
+                            }
+                        ),
+                        404,
+                    )
+                # Re-raise other S3 errors
+                logger.error(
+                    f"S3 error downloading {object_key}: {exc}", exc_info=True
+                )
+                raise
 
             # Log the action for audit
             AuditLog.log_action(
