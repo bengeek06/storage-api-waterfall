@@ -44,6 +44,7 @@ jobs:
         echo "MINIO_ACCESS_KEY=minioadmin" >> .env.testing
         echo "MINIO_SECRET_KEY=minioadmin" >> .env.testing
         echo "STORAGE_BUCKET=test-storage" >> .env.testing
+        echo "USE_PROJECT_SERVICE=false" >> .env.testing
         echo "PROJECT_SERVICE_URL=http://localhost:5001" >> .env.testing
         echo "TESTING=true" >> .env.testing
     

@@ -390,13 +390,21 @@ def check_project_access(project_id, action="read", file_id=None):
     Call project service to verify user has access to a project.
 
     Args:
-        project_id (str): UUID of the project
-        action (str): Action to perform ('read', 'write', 'delete', 'lock', 'validate')
+        project_id (str): UUID of the project to check access for
+        action (str): Action being performed (e.g., "read", "write", "delete")
         file_id (str, optional): File ID for audit logging
 
     Returns:
         tuple: (allowed (bool), error_message (str or None), status_code (int))
     """
+    # Check if project service integration is enabled
+    use_project_service = current_app.config.get("USE_PROJECT_SERVICE", True)
+    if not use_project_service:
+        logger.debug(
+            f"Project service disabled - allowing access for project {project_id}, action {action}"
+        )
+        return True, None, 200
+
     project_service_url = current_app.config.get("PROJECT_SERVICE_URL")
     if not project_service_url:
         logger.error("PROJECT_SERVICE_URL not configured")
@@ -486,6 +494,18 @@ def check_project_access_batch(checks):
         tuple: (results (list), error_message (str or None), status_code (int))
                results format: [{"project_id": "uuid", "action": "read", "allowed": true}]
     """
+    # Check if project service integration is enabled
+    use_project_service = current_app.config.get("USE_PROJECT_SERVICE", True)
+    if not use_project_service:
+        logger.debug(
+            f"Project service disabled - allowing batch access for {len(checks)} checks"
+        )
+        # Return all checks as allowed
+        results = [
+            {**check, "allowed": True} for check in checks
+        ]
+        return results, None, 200
+
     project_service_url = current_app.config.get("PROJECT_SERVICE_URL")
     if not project_service_url:
         logger.error("PROJECT_SERVICE_URL not configured")
