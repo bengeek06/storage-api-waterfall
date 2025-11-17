@@ -55,6 +55,14 @@ class Config:
         "PROJECT_SERVICE_URL", "http://localhost:5001"
     )
 
+    # Project Service Integration
+    # Set to false to run storage service standalone without project service
+    # Accepts: true/false, yes/no, 1/0
+    USE_PROJECT_SERVICE = (
+        os.environ.get("USE_PROJECT_SERVICE", "true").lower()
+        in ["true", "yes", "1"]
+    )
+
 
 class DevelopmentConfig(Config):
     """Configuration for the development environment."""
