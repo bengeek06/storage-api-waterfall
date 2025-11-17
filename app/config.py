@@ -51,9 +51,24 @@ class Config:
     MINIO_SERVICE_URL = os.environ.get(
         "MINIO_SERVICE_URL", "http://localhost:9000"
     )
-    PROJECT_SERVICE_URL = os.environ.get(
-        "PROJECT_SERVICE_URL", "http://localhost:5001"
+
+    # Project Service Integration
+    # Set to false to run storage service standalone without project service
+    # Accepts: true/false, yes/no, 1/0
+    USE_PROJECT_SERVICE = (
+        os.environ.get("USE_PROJECT_SERVICE", "true").lower()
+        in ["true", "yes", "1"]
     )
+
+    # Validate PROJECT_SERVICE_URL if project service integration is enabled
+    if USE_PROJECT_SERVICE:
+        PROJECT_SERVICE_URL = os.environ.get("PROJECT_SERVICE_URL")
+        if not PROJECT_SERVICE_URL:
+            raise ValueError(PROJECT_SERVICE_URL_ERROR)
+    else:
+        PROJECT_SERVICE_URL = os.environ.get(
+            "PROJECT_SERVICE_URL", "http://localhost:5001"
+        )
 
 
 class DevelopmentConfig(Config):

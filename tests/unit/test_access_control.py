@@ -111,6 +111,8 @@ class TestProjectAccess:
     def test_project_access_allowed(self, mock_post, app):
         """Test successful project access check."""
         with app.test_request_context():
+            # Enable project service for this test
+            app.config["USE_PROJECT_SERVICE"] = True
             g.user_id = "user-123"
 
             mock_response = MagicMock()
@@ -139,6 +141,7 @@ class TestProjectAccess:
     def test_project_access_denied(self, mock_post, app):
         """Test denied project access."""
         with app.test_request_context():
+            app.config["USE_PROJECT_SERVICE"] = True
             g.user_id = "user-123"
 
             mock_response = MagicMock()
@@ -161,6 +164,7 @@ class TestProjectAccess:
     def test_project_access_with_file_id(self, mock_post, app):
         """Test project access check includes file_id for audit."""
         with app.test_request_context():
+            app.config["USE_PROJECT_SERVICE"] = True
             g.user_id = "user-123"
 
             mock_response = MagicMock()
@@ -180,6 +184,7 @@ class TestProjectAccess:
     def test_project_service_timeout(self, mock_post, app):
         """Test project service timeout handling."""
         with app.test_request_context():
+            app.config["USE_PROJECT_SERVICE"] = True
             g.user_id = "user-123"
 
             import requests
@@ -198,6 +203,7 @@ class TestProjectAccess:
     def test_project_service_unavailable(self, mock_post, app):
         """Test project service unavailable handling."""
         with app.test_request_context():
+            app.config["USE_PROJECT_SERVICE"] = True
             g.user_id = "user-123"
 
             import requests
@@ -216,6 +222,7 @@ class TestProjectAccess:
     def test_project_service_error_response(self, mock_post, app):
         """Test project service error response."""
         with app.test_request_context():
+            app.config["USE_PROJECT_SERVICE"] = True
             g.user_id = "user-123"
 
             mock_response = MagicMock()
@@ -239,6 +246,7 @@ class TestProjectAccessBatch:
     def test_batch_access_success(self, mock_post, app):
         """Test successful batch access check."""
         with app.test_request_context():
+            app.config["USE_PROJECT_SERVICE"] = True
             g.user_id = "user-123"
 
             mock_response = MagicMock()
@@ -268,6 +276,7 @@ class TestProjectAccessBatch:
     def test_batch_access_timeout(self, mock_post, app):
         """Test batch access timeout handling."""
         with app.test_request_context():
+            app.config["USE_PROJECT_SERVICE"] = True
             g.user_id = "user-123"
 
             import requests
