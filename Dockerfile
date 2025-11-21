@@ -13,6 +13,7 @@ WORKDIR /app
 # System deps (only what we actually need runtime + build for psycopg if used later)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    curl \
     libpq-dev \
     postgresql-client \
     && rm -rf /var/lib/apt/lists/*
@@ -91,8 +92,9 @@ WORKDIR /app
 
 # Only runtime system deps (no build-essential)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    postgresql-client \
+    curl \
     libpq5 \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed site-packages from base (dependencies) to slim runtime
